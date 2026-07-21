@@ -16,7 +16,7 @@
 >
 
     <!-- MAIN CONTAINER -->
-    <div class="max-w-7xl mx-auto">
+<div class="max-w-7xl mx-auto">
         
         <!-- HEADER SECTION -->
         <div class="mb-8">
@@ -35,17 +35,33 @@
                     </div>
                 </div>
 
-                <button
-                    type="button"
-                    @click="openCreate = true"
-                    class="group inline-flex items-center gap-3 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white px-6 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 font-semibold"
-                >
-                    <svg class="w-5 h-5 group-hover:rotate-90 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-                    </svg>
-                    New Campaign
-                </button>
-            </div>
+                <!-- ✅ BUTTONS KA GROUP BANAO -->
+                <div class="flex items-center gap-3">
+                    <!-- 🔄 Refresh Templates Button (NEW) -->
+                    <button
+                        type="button"
+                        @click="refreshTemplates()"
+                        class="inline-flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white px-4 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 font-semibold"
+                    >
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                        </svg>
+                        Refresh Templates
+                    </button>
+
+                    <!-- New Campaign Button (EXISTING) -->
+                    <button
+                        type="button"
+                        @click="openCreate = true"
+                        class="group inline-flex items-center gap-3 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white px-6 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 font-semibold"
+                    >
+                        <svg class="w-5 h-5 group-hover:rotate-90 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                        </svg>
+                        New Campaign
+                    </button>
+                </div>
+            </div>    
 <!-- STATS CARDS -->
 <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
 
@@ -460,10 +476,28 @@ Selected:
                         </div>
                         <div>
                             <p class="text-sm text-gray-600 mb-1">Message Template</p>
-                            <div class="flex items-center gap-2">
-                                <code class="px-3 py-1 bg-white rounded-lg text-sm font-mono text-indigo-700 border border-indigo-200">hello_world</code>
-                                <span class="text-xs text-gray-500">(Default Template)</span>
-                            </div>
+                            <div class="bg-gradient-to-r from-gray-50 to-blue-50 rounded-xl p-4 mb-6">
+
+    <label class="block text-sm font-medium text-gray-700 mb-2">
+        Select WhatsApp Template
+    </label>
+
+    <select
+        x-model="selectedTemplate"
+        class="w-full border border-gray-300 rounded-lg px-3 py-3"
+    >
+        <option value="">Select Template</option>
+
+        <template x-for="t in templates" :key="t._id">
+            <option
+                :value="t.name"
+                x-text="t.name">
+            </option>
+        </template>
+
+    </select>
+
+</div>
                         </div>
                     </div>
                 </div>
@@ -480,7 +514,7 @@ Selected:
    <button
     type="button"
     @click="sendCampaign()"
-    :disabled="!selectedGroup"
+    :disabled="!selectedGroup || !selectedTemplate"
     class="flex-1 px-4 py-3 bg-gradient-to-r from-indigo-500 to-purple-600
            text-white rounded-lg hover:shadow-lg transition-shadow font-medium
            disabled:opacity-50 disabled:cursor-not-allowed"
@@ -500,6 +534,8 @@ function campaignApp() {
     return {
         campaigns: @json($campaigns),
         groups: @json($groups),
+        templates: @json($templates),
+        selectedTemplate: '',
 
         openCreate: false,
         openSend: false,
@@ -548,44 +584,69 @@ function campaignApp() {
         openSendModal(c) {
             this.activeCampaign = c;
             this.selectedGroup = null;
+            this.selectedTemplate = this.templates.length ? this.templates[0].name : '';
             this.openSend = true;
         },
 
-      sendCampaign() {
-    if (!this.selectedGroup || !this.activeCampaign) {
-        alert('Select campaign & group');
-        return;
-    }
+        sendCampaign() {
+            if (!this.selectedGroup || !this.selectedTemplate || !this.activeCampaign) {
+                alert('Select campaign & group');
+                return;
+            }
 
-    fetch('/whatsapp-campaigns/send', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRF-TOKEN': this.csrf
+            fetch('/whatsapp-campaigns/send', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': this.csrf
+                },
+                body: JSON.stringify({
+                    campaign_id: this.activeCampaign._id,
+                    group_id: this.selectedGroup,
+                    template: this.selectedTemplate
+                })
+            })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    this.openSend = false;
+                    this.activeCampaign.status = 'sent';
+                    alert(`✅ Campaign sent! ${res.sent} sent, ${res.failed} failed`);
+                } else {
+                    alert(res.message || 'Send failed');
+                }
+            })
+            .catch(e => {
+                console.error(e);
+                alert('Send error');
+            });
         },
-        body: JSON.stringify({
-            campaign_id: this.activeCampaign._id, // ✅ COMMA ADDED
-            group_id: this.selectedGroup,
-            template: 'hello_world'
-        })
-    })
-    .then(r => r.json())
-    .then(res => {
-        if (res.success) {
-            this.openSend = false;
 
-            // optional UI update
-            this.activeCampaign.status = 'sent';
-        } else {
-            alert(res.message || 'Send failed');
+        // ✅ YEH METHOD ADD KARO - MISSING!
+        refreshTemplates() {
+            if (!confirm('Refresh templates from WhatsApp API?')) return;
+
+            fetch('/whatsapp-accounts/refresh-templates', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': this.csrf
+                }
+            })
+            .then(r => r.json())
+            .then(res => {
+                if (res.success) {
+                    alert(res.message);
+                    location.reload();
+                } else {
+                    alert(res.message || 'Failed to refresh templates');
+                }
+            })
+            .catch(e => {
+                console.error(e);
+                alert('Error refreshing templates');
+            });
         }
-    })
-    .catch(e => {
-        console.error(e);
-        alert('Send error');
-    });
-}
-
     }
 }
 </script>

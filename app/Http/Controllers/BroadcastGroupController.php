@@ -149,6 +149,7 @@ class BroadcastGroupController extends Controller
     /**
      * POST /broadcast-groups/send
      */
+    
     public function send(Request $request)
     {
         $request->validate([

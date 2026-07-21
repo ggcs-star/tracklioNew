@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use App\Services\Post\PostCrudService;
 use Illuminate\Support\Facades\Http;
 use App\Models\SocialAccount;
+use Illuminate\Support\Facades\Storage;
 
 class PostController extends Controller
 {
@@ -21,9 +22,55 @@ class PostController extends Controller
         return $this->posts->create();
     }
 
-    public function store(Request $request)
+     public function store(Request $request)
     {
-        return $this->posts->store($request);
+        // 🔥 CROPPED IMAGES HANDLE
+        $croppedData = [];
+        $tempFiles = [];
+        
+        if ($request->has('cropped_images')) {
+            $croppedData = json_decode($request->cropped_images, true);
+            
+            foreach ($croppedData as $index => $crop) {
+                // 🔥 ORIGINAL skip karo, sirf crop wali images save karo
+                if ($crop['ratio'] !== 'original') {
+                    try {
+                        // Base64 se image save karo
+                        $imageData = base64_decode(preg_replace('#^data:image/\w+;base64,#', '', $crop['data']));
+                        $filename = 'cropped_' . time() . '_' . $index . '.jpg';
+                        $path = 'posts/' . $filename;
+                        Storage::disk('public')->put($path, $imageData);
+                        $tempFiles[$index] = $path;
+                    } catch (\Exception $e) {
+                        \Log::error('Crop save failed: ' . $e->getMessage());
+                    }
+                }
+            }
+        }
+        
+        // Store the post
+        $result = $this->posts->store($request);
+        
+        // Agar post create ho gayi aur cropped images hain
+        if ($result instanceof \App\Models\Post && !empty($tempFiles)) {
+            $post = $result;
+            $mediaPaths = $post->media_paths ?? [];
+            
+            // 🔥 Agar media_paths empty hai toh media_path se array banao
+            if (empty($mediaPaths) && $post->media_path) {
+                $mediaPaths = [$post->media_path];
+            }
+            
+            foreach ($tempFiles as $index => $path) {
+                $mediaPaths[$index] = $path;
+            }
+            
+            $post->media_paths = $mediaPaths;
+            $post->media_path = $mediaPaths[0] ?? null;
+            $post->save();
+        }
+        
+        return $result;
     }
 
     public function show($id)

@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Log;
 use App\Models\Post;
 use App\Models\SocialAccount;
 use App\Jobs\InstagramPostJob;
+use Illuminate\Support\Facades\Storage;
 class PostCrudService
 {
     protected FacebookPostService $facebook;
@@ -185,22 +186,69 @@ class PostCrudService
                 }
             $mediaPath = null;
             $mediaPaths = [];
+              $croppedPaths = [];
+            if ($request->has('cropped_images')) {
+                $croppedData = json_decode($request->cropped_images, true);
+                
+                foreach ($croppedData as $index => $crop) {
+                    if ($crop['ratio'] !== 'original') {
+                        try {
+                            $imageData = base64_decode(preg_replace('#^data:image/\w+;base64,#', '', $crop['data']));
+                            $filename = 'cropped_' . time() . '_' . $index . '.jpg';
+                            $path = 'posts/' . $filename;
+                            Storage::disk('public')->put($path, $imageData);
+                            $croppedPaths[$index] = $path;
+                            Log::info('Crop saved: ' . $path);
+                        } catch (\Exception $e) {
+                            Log::error('Crop save failed: ' . $e->getMessage());
+                        }
+                    }
+                }
+            }
 
-            if ($request->hasFile('media_files')) {
-                foreach ($request->file('media_files') as $file) {
-                    $mediaPaths[] = $file->store('posts', 'public');
+            // 🔥 MEDIA UPLOAD - CROPPED PEHLE
+            if (!empty($croppedPaths)) {
+                foreach ($croppedPaths as $index => $path) {
+                    $mediaPaths[$index] = $path;
                 }
                 $mediaPath = $mediaPaths[0] ?? null;
+                Log::info('Using cropped images: ' . json_encode($mediaPaths));
             }
 
-            if ($request->hasFile('media')) {
-                $mediaPath = $request->file('media')->store('posts', 'public');
-                if (!empty($mediaPaths)) {
-                    $mediaPaths = array_merge([$mediaPath], $mediaPaths);
-                } else {
-                    $mediaPaths = [$mediaPath];
+            // 🔥 ORIGINAL FILES (agar crop nahi hai toh)
+            if (empty($croppedPaths)) {
+                if ($request->hasFile('media_files')) {
+                    foreach ($request->file('media_files') as $file) {
+                        $mediaPaths[] = $file->store('posts', 'public');
+                    }
+                    $mediaPath = $mediaPaths[0] ?? null;
+                }
+
+                if ($request->hasFile('media')) {
+                    $mediaPath = $request->file('media')->store('posts', 'public');
+                    if (!empty($mediaPaths)) {
+                        $mediaPaths = array_merge([$mediaPath], $mediaPaths);
+                    } else {
+                        $mediaPaths = [$mediaPath];
+                    }
                 }
             }
+
+            // if ($request->hasFile('media_files')) {
+            //     foreach ($request->file('media_files') as $file) {
+            //         $mediaPaths[] = $file->store('posts', 'public');
+            //     }
+            //     $mediaPath = $mediaPaths[0] ?? null;
+            // }
+
+            // if ($request->hasFile('media')) {
+            //     $mediaPath = $request->file('media')->store('posts', 'public');
+            //     if (!empty($mediaPaths)) {
+            //         $mediaPaths = array_merge([$mediaPath], $mediaPaths);
+            //     } else {
+            //         $mediaPaths = [$mediaPath];
+            //     }
+            // }
             Log::info('Content before save:', ['content' => $request->input('content')]);
             $post = Post::create([
                 'user_id'   => (string) auth()->user()->_id,

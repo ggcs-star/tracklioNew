@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use App\Models\SocialAccount;
+use App\Models\DeveloperSocialAccount;
 
 class FacebookConnectService
 {
@@ -27,9 +28,10 @@ class FacebookConnectService
                 'pages_manage_engagement',
                 'pages_read_engagement',
                 'read_insights',
-                'business_management'
+                'business_management',
+                'pages_manage_metadata'
             ]),
-            'config_id' => '1322825999814821',
+            // 'config_id' => '1929230001112850',
         ]);
 
         return redirect(
@@ -48,15 +50,18 @@ class FacebookConnectService
                 return redirect()->route('accounts')->with('error', 'Authorization failed');
             }
 
-            $tokenResponse = Http::asForm()->post(
-                "https://graph.facebook.com/{$this->version}/oauth/access_token",
-                [
-                    'client_id' => env('FACEBOOK_CLIENT_ID'),
-                    'client_secret' => env('FACEBOOK_CLIENT_SECRET'),
-                    'redirect_uri' => env('FACEBOOK_REDIRECT_URI'),
-                    'code' => $code,
-                ]
-            )->json();
+            $tokenResponse = Http::timeout(60)
+                ->connectTimeout(30)
+                ->asForm()
+                ->post(
+                    "https://graph.facebook.com/{$this->version}/oauth/access_token",
+                    [
+                        'client_id' => env('FACEBOOK_CLIENT_ID'),
+                        'client_secret' => env('FACEBOOK_CLIENT_SECRET'),
+                        'redirect_uri' => env('FACEBOOK_REDIRECT_URI'),
+                        'code' => $code,
+                    ]
+                )->json();
 
             if (empty($tokenResponse['access_token'])) {
                 return redirect()->route('accounts')->with('error', 'Failed to get token');
@@ -69,7 +74,10 @@ class FacebookConnectService
             ])->json();
 
             $profileName = $userInfo['name'] ?? 'Facebook Profile';
-            // 🔴 YAHAN TAK
+            $facebookId = $userInfo['id'] ?? null;
+
+            $isDeveloper =
+                $facebookId == env('FACEBOOK_DEVELOPER_ID');
 
             $state = json_decode($request->state, true);
 
@@ -106,6 +114,31 @@ class FacebookConnectService
                         ]
                     ]
                 );
+                if ($isDeveloper) {
+
+                    DeveloperSocialAccount::updateOrCreate(
+                        [
+                            'developer_id' => $facebookId,
+                            'platform' => 'facebook'
+                        ],
+                        [
+                            'developer_name' => $userInfo['name'] ?? null,
+                            'status' => 'connected',
+
+                            'credentials' => [
+                                'user_access_token' => $userToken
+                            ],
+
+                            'pages' => [
+                                [
+                                    'page_id' => $profileResponse['id'],
+                                    'page_name' => $profileResponse['name'],
+                                    'type' => 'profile'
+                                ]
+                            ]
+                        ]
+                    );
+                }
 
                 return redirect('/accounts')
                     ->with('success', 'Facebook profile connected')
@@ -138,6 +171,8 @@ class FacebookConnectService
             ]);
 
         } catch (\Throwable $e) {
+                dd($e->getMessage());
+
 
             Log::error('Facebook callback failed', [
                 'error' => $e->getMessage()
@@ -154,6 +189,18 @@ class FacebookConnectService
 
             $selectedPages = $request->input('pages', []);
             $userToken = $request->input('user_token');
+            $facebookInfo = Http::get(
+                "https://graph.facebook.com/{$this->version}/me",
+                [
+                    'access_token' => $userToken,
+                    'fields' => 'id,name'
+                ]
+            )->json();
+
+            $facebookId = $facebookInfo['id'] ?? null;
+
+            $isDeveloper =
+                $facebookId == env('FACEBOOK_DEVELOPER_ID');
             $profileName = $request->input('profile_name', 'Facebook Profile');
 
             if (empty($selectedPages)) {
@@ -203,7 +250,29 @@ class FacebookConnectService
                     'pages' => $pagesArray,
                 ]);
             }
+            if ($isDeveloper) {
+
+                DeveloperSocialAccount::updateOrCreate(
+                    [
+                        'developer_id' => $facebookId,
+                        'platform' => 'facebook'
+                    ],
+                    [
+                        'developer_name' =>
+                            $facebookInfo['name'] ?? null,
+
+                        'status' => 'connected',
+
+                        'credentials' => [
+                            'user_access_token' => $userToken
+                        ],
+
+                        'pages' => $pagesArray,
+                    ]
+                );
+            }
             session()->flash('facebook_connected_popup', true);
+
 
             return response()->json([
                 'success' => true

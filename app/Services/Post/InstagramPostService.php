@@ -67,10 +67,24 @@ class InstagramPostService
         ]);
 
         $transformation = [];
+
         if ($postType === 'story' || $postType === 'reel') {
-            $transformation = ['aspect_ratio' => '9:16', 'crop' => 'fill', 'width' => 1080, 'height' => 1920];
+
+            $transformation = [
+                'aspect_ratio' => '9:16',
+                'crop' => 'fill',
+                'width' => 1080,
+                'height' => 1920
+            ];
+
         } else {
-            $transformation = ['aspect_ratio' => '1:1', 'crop' => 'fill', 'width' => 1080, 'height' => 1080];
+
+            // Feed post - original ratio preserve rahega
+            $transformation = [
+                'crop' => 'limit',
+                'width' => 1080
+            ];
+
         }
 
         $uploadResult = $cloudinary->uploadApi()->upload($fullPath, [
@@ -99,7 +113,7 @@ class InstagramPostService
                 $uploadResult = $cloudinary->uploadApi()->upload($fullPath, [
                     'folder' => 'instagram',
                     'resource_type' => 'image',
-                    'transformation' => ['aspect_ratio' => '1:1', 'crop' => 'fill', 'width' => 1080, 'height' => 1080]
+                    'transformation' => ['crop' => 'limit','width' => 1080]
                 ]);
                 
                 $imageUrl = $uploadResult['secure_url'];

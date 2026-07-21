@@ -269,7 +269,9 @@
                                 <input
                                     type="checkbox"
                                     @change="toggleAllVisibleContacts"
-                                    :checked="visibleContacts.length > 0 && visibleContacts.every(c => selectedContacts.includes(c.id))"
+                                    :checked="filteredContacts.length>0 &&
+filteredContacts.every(c =>
+selectedContacts.includes(c.id))"
                                     class="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
                                 >
                                 Select All
@@ -302,16 +304,14 @@
 
                     <!-- VIRTUAL SCROLL CONTAINER -->
                     <div
-                        x-ref="scrollContainer"
-                        @scroll.debounce.50ms="handleScroll($event.target)"
-                        class="border border-gray-300 rounded-lg overflow-hidden relative"
-                        style="height: 256px;"
+                        class="border border-gray-300 rounded-lg overflow-y-auto"
+                        style="height:600px;"
                     >
                         <!-- TOP SPACER -->
-                        <div x-bind:style="'height: ' + topPadding + 'px'"></div>
+                        <!-- <div x-bind:style="'height: ' + topPadding + 'px'"></div> -->
 
                         <!-- VISIBLE CONTACTS -->
-                        <template x-for="contact in visibleContacts" :key="contact.id">
+                        <template x-for="contact in filteredContacts" :key="contact.id">
                             <label class="flex items-center gap-4 px-4 py-4 border-b border-gray-200 hover:bg-gray-50 transition-colors cursor-pointer last:border-b-0" style="height: 64px;">
                                 <input
                                     type="checkbox"
@@ -336,7 +336,7 @@
                         </template>
 
                         <!-- BOTTOM SPACER -->
-                        <div x-bind:style="'height: ' + bottomPadding + 'px'"></div>
+                        <!-- <div x-bind:style="'height: ' + bottomPadding + 'px'"></div> -->
 
                         <!-- EMPTY STATE -->
                         <template x-if="filteredContacts.length === 0">
@@ -358,8 +358,9 @@
                     <!-- COUNTER INFO -->
                     <div class="flex items-center justify-between text-xs text-gray-500 mt-2">
                         <span>
-                            Showing <span class="font-medium" x-text="visibleContacts.length"></span> of 
-                            <span class="font-medium" x-text="filteredContacts.length"></span> contacts
+                            Showing
+                            <span x-text="filteredContacts.length"></span>
+                            Contacts
                             <template x-if="contactSearch">
                                 (filtered from <span x-text="contacts.length"></span> total)
                             </template>
@@ -506,12 +507,18 @@
                     </p>
                     
                     <label class="block text-sm font-medium text-gray-700 mb-2">Message Template</label>
-                    <select class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500">
-                        <option value="hello_world">Hello World (Default)</option>
-                        <option value="welcome">Welcome Message</option>
-                        <option value="promotion">Promotional Offer</option>
-                        <option value="notification">Notification Alert</option>
+                    <select 
+                        x-model="selectedTemplate"
+                        class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                    >
+                        <option value="">Select Template</option>
+                        <template x-for="t in templates" :key="t._id">
+                            <option :value="t.name" x-text="t.name + ' (' + t.category + ')'"></option>
+                        </template>
                     </select>
+                    <p x-show="templates.length === 0" class="text-sm text-red-500 mt-2">
+                        No approved templates found. Please refresh templates.
+                    </p>
                 </div>
 
                 <div class="flex gap-3">
@@ -525,7 +532,8 @@
                     <button
                         type="button"
                         @click="sendBroadcast()"
-                        class="flex-1 px-4 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg hover:shadow-lg transition-shadow font-medium"
+                        :disabled="!selectedTemplate"
+                        class="flex-1 px-4 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg hover:shadow-lg transition-shadow font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         Send Broadcast
                     </button>
@@ -542,7 +550,8 @@ function broadcastManager() {
         /* =================== DATA =================== */
         groups: @json($groups ?? []),
         contacts: [],
-
+        templates: [],           // ✅ ADD
+        selectedTemplate: '',
         /* UI States */
         loading: false,
         searchQuery: '',
@@ -563,11 +572,11 @@ function broadcastManager() {
         /* Contact Selection */
         contactSearch: '',
         selectedContacts: [],
-        scrollTop: 0,
+        // scrollTop: 0,
 
         /* Virtual Scroll */
-        rowHeight: 64,
-        viewportHeight: 256,
+        // rowHeight: 64,
+        // viewportHeight: 256,
 
         /* =================== COMPUTED =================== */
         get filteredGroups() {
@@ -588,37 +597,38 @@ function broadcastManager() {
             );
         },
 
-        get startIndex() {
-            return Math.floor(this.scrollTop / this.rowHeight);
-        },
+        // get startIndex() {
+        //     return Math.floor(this.scrollTop / this.rowHeight);
+        // },
 
-        get endIndex() {
-            return Math.min(
-                this.startIndex + Math.ceil(this.viewportHeight / this.rowHeight),
-                this.filteredContacts.length
-            );
-        },
+        // get endIndex() {
+        //     return Math.min(
+        //         this.startIndex + Math.ceil(this.viewportHeight / this.rowHeight),
+        //         this.filteredContacts.length
+        //     );
+        // },
 
-        get visibleContacts() {
-            return this.filteredContacts.slice(this.startIndex, this.endIndex);
-        },
+        // get visibleContacts() {
+        //     return this.filteredContacts.slice(this.startIndex, this.endIndex);
+        // },
 
-        get topPadding() {
-            return this.startIndex * this.rowHeight;
-        },
+        // get topPadding() {
+        //     return this.startIndex * this.rowHeight;
+        // },
 
-        get bottomPadding() {
-            return Math.max(
-                0,
-                (this.filteredContacts.length - this.endIndex) * this.rowHeight
-            );
-        },
+        // get bottomPadding() {
+        //     return Math.max(
+        //         0,
+        //         (this.filteredContacts.length - this.endIndex) * this.rowHeight
+        //     );
+        // },
 
         /* =================== INIT =================== */
         async init() {
             this.csrf = document.querySelector('meta[name="csrf-token"]').content;
             await this.loadContacts();
             await this.loadGroups();
+            await this.loadTemplates();
         },
 
         async loadContacts() {
@@ -631,6 +641,20 @@ function broadcastManager() {
             const res = await fetch('/broadcast-groups');
             const data = await res.json();
             if (data.success) this.groups = data.data;
+        },
+        async loadTemplates() {
+            try {
+                const res = await fetch('/whatsapp-accounts/templates');
+                const data = await res.json();
+                if (data.success) {
+                    this.templates = data.data;
+                    if (this.templates.length > 0) {
+                        this.selectedTemplate = this.templates[0].name;
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading templates:', error);
+            }
         },
 
         /* =================== MODALS =================== */
@@ -666,19 +690,37 @@ function broadcastManager() {
 
         /* =================== CONTACT SELECT =================== */
         toggleAllVisibleContacts() {
-            const ids = this.visibleContacts.map(c => c.id);
-            const all = ids.every(id => this.selectedContacts.includes(id));
-            this.selectedContacts = all
-                ? this.selectedContacts.filter(id => !ids.includes(id))
-                : [...new Set([...this.selectedContacts, ...ids])];
-        },
 
-        handleScroll(el) {
-            this.scrollTop = el.scrollTop;
-        },
+    const ids = this.filteredContacts.map(c => c.id);
+
+    const allSelected = ids.every(id =>
+        this.selectedContacts.includes(id)
+    );
+
+    if(allSelected){
+
+        this.selectedContacts =
+            this.selectedContacts.filter(id => !ids.includes(id));
+
+    }else{
+
+        this.selectedContacts = [
+            ...new Set([
+                ...this.selectedContacts,
+                ...ids
+            ])
+        ];
+
+    }
+
+},
+
+        // handleScroll(el) {
+        //     this.scrollTop = el.scrollTop;
+        // },
 
         filterContacts() {
-            this.scrollTop = 0;
+            // this.scrollTop = 0;
         },
 
         /* =================== SAVE GROUP =================== */
@@ -733,21 +775,44 @@ function broadcastManager() {
         },
 
         /* =================== SEND =================== */
-        async sendBroadcast() {
-            await fetch('/broadcast-groups/send', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': this.csrf
-                },
-                body: JSON.stringify({
-                    group_id: this.groupToSend.id,
-                    template: 'hello_world'
-                })
-            });
-            this.openSend = false;
-        },
+        /* =================== SEND =================== */
+async sendBroadcast() {
+    // ✅ Check if template is selected
+    if (!this.selectedTemplate) {
+        alert('Please select a template');
+        return;
+    }
 
+    try {
+        const response = await fetch('/broadcast-groups/send', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': this.csrf
+            },
+            body: JSON.stringify({
+                group_id: this.groupToSend.id,
+                template: this.selectedTemplate
+            })
+        });
+
+        const data = await response.json();
+
+        console.log(data);
+
+        if (data.success) {
+            alert(`✅ Broadcast sent successfully! ${data.sent || 0} contacts notified.`);
+            this.openSend = false;
+        } else {
+            alert(data.message || 'Failed to send broadcast');
+        }
+
+    } catch (error) {
+        console.error(error);
+        alert('Error sending broadcast: ' + error.message);
+    }
+},
         /* =================== UTIL =================== */
         formatDate(d) {
             return new Date(d).toLocaleDateString();

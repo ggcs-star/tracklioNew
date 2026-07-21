@@ -9,40 +9,56 @@ use Illuminate\Support\Facades\Log;
 
 class ContactsController extends Controller
 {
-    public function index()
-    {
-        try {
-            $userId = (string) Auth::id();
+    public function index(Request $request)
+{
+    try {
 
-            $contacts = Contact::where('user_id', $userId)
+        $userId = (string) Auth::id();
+
+        $perPage = $request->get('per_page', 10);
+        $search = $request->get('search');
+
+        $query = Contact::where('user_id', $userId);
+
+            if (!empty($search)) {
+
+                $query->where(function ($q) use ($search) {
+
+                    $q->where('name', 'like', "%{$search}%")
+                    ->orWhere('phone_number', 'like', "%{$search}%");
+
+                });
+
+            }
+
+            $contacts = $query
                 ->latest()
-                ->get()
-                ->map(fn ($c) => [
-                    '_id'          => (string) $c->_id,
-                    'name'         => $c->name,
-                    'phone_number' => $c->phone_number,
-                    'opt_in'       => (bool) $c->opt_in,
-                    'source'       => $c->source ?? 'manual',
-                ])
-                ->values();
+                ->paginate($perPage);
 
-            return response()->json([
-                'success' => true,
-                'data'    => $contacts,
-            ]);
-        } catch (\Throwable $e) {
-            Log::error('Contacts index error', [
-                'user_id' => Auth::id(),
-                'error'   => $e->getMessage(),
-                'trace'   => $e->getTraceAsString(),
-            ]);
+        $contacts->getCollection()->transform(function ($c) {
+            return [
+                '_id' => (string)$c->_id,
+                'name' => $c->name,
+                'phone_number' => $c->phone_number,
+                'opt_in' => (bool)$c->opt_in,
+                'source' => $c->source ?? 'manual',
+            ];
+        });
 
-            return response()->json([
-                'success' => false,
-                'message' => 'Something went wrong',
-            ], 500);
-        }
+        return response()->json([
+            'success' => true,
+            'data' => $contacts,
+        ]);
+
+    } catch (\Throwable $e) {
+
+        return response()->json([
+            'success' => false,
+            'message' => $e->getMessage(),
+        ],500);
+
     }
+}
 
     public function store(Request $request)
     {
@@ -107,7 +123,83 @@ public function uploadContacts(Request $request)
 
     return back()->with('error', 'Only CSV or VCF files supported');
 }
+private function uploadCsv($file)
+{
+    set_time_limit(0);
 
+    $userId = (string) auth()->id();
+
+    $handle = fopen($file->getRealPath(), 'r');
+
+    if (!$handle) {
+        return back()->with('error', 'Unable to read CSV');
+    }
+
+    $header = fgetcsv($handle);
+
+    $header = array_map(function ($h) {
+        return strtolower(trim($h));
+    }, $header);
+
+    $nameIndex  = array_search('recruiter_name', $header);
+    $phoneIndex = array_search('mobile', $header);
+
+    if ($phoneIndex === false) {
+        fclose($handle);
+        return back()->with('error', 'Mobile column not found');
+    }
+
+    $batch = [];
+    $inserted = 0;
+
+    while (($row = fgetcsv($handle)) !== false) {
+
+        $name = $nameIndex !== false
+            ? trim($row[$nameIndex] ?? '')
+            : null;
+
+        $phone = trim($row[$phoneIndex] ?? '');
+
+        if ($phone == '') {
+            continue;
+        }
+
+        // remove scientific notation issues
+        $phone = preg_replace('/[^0-9]/', '', $phone);
+
+        if (strlen($phone) == 10) {
+            $phone = '91' . $phone;
+        }
+
+        $batch[] = [
+            'user_id'      => $userId,
+            'name'         => $name,
+            'phone_number' => $phone,
+            'opt_in'       => true,
+            'source'       => 'csv',
+            'created_at'   => now(),
+            'updated_at'   => now(),
+        ];
+
+        $inserted++;
+
+        if (count($batch) >= 500) {
+            Contact::insert($batch);
+            $batch = [];
+        }
+    }
+
+    fclose($handle);
+
+    if (!empty($batch)) {
+        Contact::insert($batch);
+    }
+
+    return back()->with(
+        'success',
+        "{$inserted} contacts imported successfully."
+    );
+}
 private function uploadVcf($file)
 {
     set_time_limit(0);

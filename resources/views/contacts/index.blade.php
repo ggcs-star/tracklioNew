@@ -28,18 +28,36 @@
                 </div>
 
                 <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 md:gap-3 w-full md:w-auto mt-4 md:mt-0">
-                    <!-- CSV UPLOAD -->
-                    <form action="{{ url('/contacts/upload-csv') }}" method="POST" enctype="multipart/form-data" class="w-full sm:w-auto">
-                        @csrf
-                        <label class="cursor-pointer bg-white/10 backdrop-blur-sm hover:bg-white/20 border border-white/20 text-white px-3 sm:px-4 md:px-5 py-2 md:py-3 rounded-lg md:rounded-xl shadow transition-all duration-300 hover:scale-105 flex items-center justify-center gap-2 md:gap-3 group text-sm md:text-base w-full">
-                            <svg class="w-4 h-4 md:w-5 md:h-5 group-hover:rotate-12 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                      d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1M12 12v9m0-9l-3 3m3-3l3 3m0-9a4 4 0 00-8 0v5"/>
-                            </svg>
-                            <span class="font-medium truncate">Upload CSV</span>
-                            <input type="file" name="csv_file" accept=".csv" class="hidden" onchange="this.form.submit()">
-                        </label>
-                    </form>
+                    <form action="{{ url('/contacts/upload-csv') }}" method="POST" enctype="multipart/form-data">
+
+    @csrf
+
+    <label
+        class="cursor-pointer bg-slate-700 hover:bg-slate-800 text-white px-6 py-3 rounded-xl shadow flex items-center gap-2">
+
+        <svg xmlns="http://www.w3.org/2000/svg"
+             class="w-5 h-5"
+             fill="none"
+             viewBox="0 0 24 24"
+             stroke="currentColor">
+            <path stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1M12 4v12m0-12l-4 4m4-4l4 4"/>
+        </svg>
+
+        <span>Upload CSV</span>
+
+        <input
+            type="file"
+            name="file"
+            accept=".csv,.vcf"
+            class="hidden"
+            onchange="this.form.submit()">
+
+    </label>
+
+</form>
 
                     <!-- ADD CONTACT -->
                     <button
@@ -76,7 +94,7 @@
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 md:gap-0">
                 <div>
                     <h3 class="text-lg md:text-lg font-semibold text-slate-900">All Contacts</h3>
-                    <p class="text-xs md:text-sm text-slate-600 mt-1">Total <span x-text="contacts.length" class="font-bold text-indigo-600"></span> contacts
+                    <p class="text-xs md:text-sm text-slate-600 mt-1">Total <span x-text="totalContacts" class="font-bold text-indigo-600"></span> contacts
                         <span x-show="searchQuery && filteredContacts.length !== contacts.length" class="text-slate-500">
                             (Showing <span x-text="filteredContacts.length" class="font-semibold"></span> filtered)
                         </span>
@@ -89,13 +107,14 @@
                         type="text"
                         placeholder="Search contacts..."
                         x-model="searchQuery"
-                        @input.debounce.300ms="filterContacts()"
+                        @input.debounce.500ms="fetchContacts(1)"
+                        
                         class="pl-9 md:pl-10 pr-8 md:pr-10 py-2 md:py-2.5 border border-slate-300 rounded-lg md:rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 w-full sm:w-48 md:w-64"
                     >
                     <!-- Clear Search Button -->
                     <button
                         x-show="searchQuery.length > 0"
-                        @click="searchQuery = ''; filterContacts()"
+                        @click="searchQuery=''; fetchContacts(1)"
                         class="absolute right-2 md:right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors p-1"
                         type="button"
                     >
@@ -184,7 +203,7 @@
                                     <span x-show="!searchQuery">Start by adding your first contact</span>
                                 </p>
                                 <button
-                                    @click="searchQuery ? (searchQuery = ''; filterContacts()) : openAdd = true"
+                                    @click="searchQuery ? (searchQuery = ''; fetchContacts(1)) : openAdd = true"
                                     class="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white px-4 py-2.5 md:px-5 md:py-2.5 rounded-lg shadow flex items-center gap-2 transition-all duration-300 hover:scale-105 text-sm md:text-base">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
@@ -266,7 +285,7 @@
                         <span x-show="!searchQuery">Start by adding your first contact</span>
                     </p>
                     <button
-                        @click="searchQuery ? (searchQuery = ''; filterContacts()) : openAdd = true"
+                        @click="searchQuery ? (searchQuery = ''; fetchContacts(1)) : openAdd = true"
                         class="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white px-5 py-2.5 rounded-lg shadow flex items-center gap-2 transition-all duration-300 hover:scale-105 mx-auto">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
@@ -287,14 +306,37 @@
                         (of <span x-text="contacts.length"></span> total)
                     </span>
                 </div>
-                <div class="flex items-center gap-1 md:gap-2">
-                    <button class="px-2.5 md:px-3 py-1.5 md:py-1.5 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 transition-colors text-xs md:text-sm min-w-[70px]">
-                        Previous
-                    </button>
-                    <button class="px-2.5 md:px-3 py-1.5 md:py-1.5 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 transition-colors text-xs md:text-sm min-w-[70px]">
-                        Next
-                    </button>
-                </div>
+                <div class="flex items-center gap-3">
+                <button
+                    @click="if(currentPage>1) fetchContacts(currentPage-1)"
+                    :disabled="currentPage==1"
+                    class="px-3 py-2 border rounded">
+
+                    Previous
+
+                </button>
+
+                <span>
+
+                    Page
+                    <span x-text="currentPage"></span>
+
+                    of
+
+                    <span x-text="lastPage"></span>
+
+                </span>
+
+                <button
+                    @click="if(currentPage<lastPage) fetchContacts(currentPage+1)"
+                    :disabled="currentPage==lastPage"
+                    class="px-3 py-2 border rounded">
+
+                    Next
+
+                </button>
+
+            </div>
             </div>
         </div>
     </div>
@@ -400,6 +442,10 @@ function contactsManager(csrfToken) {
         searchQuery: '',
         openAdd: false,
         csrf: csrfToken,
+        currentPage: 1,
+        lastPage: 1,
+        perPage: 10,
+        totalContacts: 0,
 
         form: {
             name: '',
@@ -407,53 +453,63 @@ function contactsManager(csrfToken) {
             opt_in: true
         },
 
-        fetchContacts() {
-            fetch('/contacts')
+        fetchContacts(page = 1) {
+
+            fetch(`/contacts?page=${page}&per_page=10&search=${encodeURIComponent(this.searchQuery)}`)
                 .then(res => res.json())
                 .then(res => {
-                    if (res.success && Array.isArray(res.data)) {
-                        this.contacts = res.data;
-                        this.filteredContacts = [...res.data]; // Initialize filtered contacts
+
+                    if(res.success){
+
+                        this.contacts = res.data.data;
+                        this.filteredContacts = this.contacts;
+
+                        this.currentPage = res.data.current_page;
+                        this.lastPage = res.data.last_page;
+                        this.totalContacts = res.data.total;
+
                     }
-                })
-                .catch(error => {
-                    console.error('Error fetching contacts:', error);
+
                 });
+
         },
 
-        filterContacts() {
-            if (!this.searchQuery.trim()) {
-                this.filteredContacts = [...this.contacts];
-                return;
-            }
+        // filterContacts() {
+        //     if (!this.searchQuery.trim()) {
+        //         this.filteredContacts = [...this.contacts];
+        //         return;
+        //     }
 
-            const query = this.searchQuery.toLowerCase().trim();
+        //     const query = this.searchQuery.toLowerCase().trim();
             
-            this.filteredContacts = this.contacts.filter(contact => {
-                // Search in name
-                if (contact.name && contact.name.toLowerCase().includes(query)) {
-                    return true;
-                }
+        //     this.filteredContacts = this.contacts.filter(contact => {
+        //         // Search in name
+        //         if (contact.name && contact.name.toLowerCase().includes(query)) {
+        //             return true;
+        //         }
                 
-                // Search in phone number
-                if (contact.phone_number && contact.phone_number.includes(query)) {
-                    return true;
-                }
+        //         // Search in phone number
+        //         if (contact.phone_number && contact.phone_number.includes(query)) {
+        //             return true;
+        //         }
                 
-                // Search in source
-                if (contact.source && contact.source.toLowerCase().includes(query)) {
-                    return true;
-                }
+        //         // Search in source
+        //         if (contact.source && contact.source.toLowerCase().includes(query)) {
+        //             return true;
+        //         }
                 
-                // Search in opt-in status
-                const optInStatus = contact.opt_in ? 'opted' : 'not opted';
-                if (optInStatus.includes(query)) {
-                    return true;
-                }
+        //         // Search in opt-in status
+        //         const optInStatus = contact.opt_in ? 'opted' : 'not opted';
+        //         if (optInStatus.includes(query)) {
+        //             return true;
+        //         }
                 
-                return false;
-            });
-        },
+        //         return false;
+        //     });
+        // },
+        filterContacts() {
+    this.fetchContacts(1);
+},
 
         saveContact() {
             if (!this.form.phone_number.trim()) {
@@ -472,8 +528,7 @@ function contactsManager(csrfToken) {
             .then(res => res.json())
             .then(res => {
                 if (res.success && res.data) {
-                    this.contacts.unshift(res.data);
-                    this.filterContacts(); // Update filtered contacts after adding new one
+                    this.fetchContacts(this.currentPage);
                     this.openAdd = false;
                     this.form = { name: '', phone_number: '', opt_in: true };
                     this.showToast('Contact added successfully!', 'success');

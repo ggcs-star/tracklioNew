@@ -30,12 +30,10 @@ class PublishPostJob implements ShouldQueue
 
         $videoPath = storage_path("app/public/{$this->data['media_path']}");
 
-        // 🔐 Token (auto refresh)
         $accessToken = YouTubeTokenService::getAccessToken(
             $this->data['user_id']
         );
 
-        /* ---------- INIT UPLOAD ---------- */
         $init = Http::withHeaders([
             'Authorization' => "Bearer {$accessToken}",
             'Content-Type'  => 'application/json; charset=UTF-8',
@@ -56,10 +54,9 @@ class PublishPostJob implements ShouldQueue
         $uploadUrl = $init->header('Location');
 
         if (!$uploadUrl) {
-            return; // ❌ FAIL → DB SAVE नहीं
+            return; 
         }
 
-        /* ---------- UPLOAD VIDEO ---------- */
         $upload = Http::withHeaders([
             'Authorization' => "Bearer {$accessToken}",
             'Content-Type'  => 'video/mp4',
@@ -71,10 +68,9 @@ class PublishPostJob implements ShouldQueue
         $data = $upload->json();
 
         if (!isset($data['id'])) {
-            return; // ❌ FAIL → DB SAVE नहीं
+            return; 
         }
 
-        /* ---------- ✅ SUCCESS → SAVE DB ---------- */
         Post::create([
             'user_id'    => $this->data['user_id'],
             'content'    => $this->data['content'],

@@ -81,7 +81,7 @@
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-gray-200">
-                            <template x-for="a in accounts" :key="a._id">
+                            <template x-for="(a,index) in accounts" :key="index">
                                 <tr class="hover:bg-gray-50 transition-colors">
                                     <td class="px-6 py-4 whitespace-nowrap">
                                         <div class="flex items-center gap-3">

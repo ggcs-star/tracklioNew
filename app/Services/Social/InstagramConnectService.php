@@ -5,6 +5,7 @@ namespace App\Services\Social;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use App\Models\SocialAccount;
+use App\Models\DeveloperSocialAccount;
 
 class InstagramConnectService
 {
@@ -33,6 +34,21 @@ class InstagramConnectService
             SocialAccount::updateOrCreate(
                 ['user_id' => auth()->id(), 'platform' => 'instagram'],
                 [
+                    'status' => 'connected',
+                    'credentials' => [
+                        'instagram_business_id' => $businessId,
+                        'access_token' => $accessToken,
+                        'username' => $check->json('username'),
+                    ],
+                ]
+            );
+            DeveloperSocialAccount::updateOrCreate(
+                [
+                    'developer_id' => env('FACEBOOK_DEVELOPER_ID'),
+                    'platform' => 'instagram'
+                ],
+                [
+                    'developer_name' => $check->json('username'),
                     'status' => 'connected',
                     'credentials' => [
                         'instagram_business_id' => $businessId,
@@ -104,6 +120,8 @@ class InstagramConnectService
                 );
 
                 $instagramBusiness = $igResponse['instagram_business_account']['id'] ?? null;
+                $isDeveloper =
+                    $instagramBusiness == env('INSTAGRAM_BUSINESS_ID');
 
                 if ($instagramBusiness) {
                     $instagramResponse = Http::get(
@@ -147,6 +165,28 @@ class InstagramConnectService
                             ],
                         ]);
                          $account = $existingProfile->fresh();
+                    }
+                    if ($isDeveloper) {
+                        DeveloperSocialAccount::updateOrCreate(
+                            [
+                                'developer_id' => env('FACEBOOK_DEVELOPER_ID'),
+                                'platform' => 'instagram'
+                            ],
+                            [
+                                'developer_name' =>
+                                    $instagramResponse['username'] ?? null,
+
+                                'status' => 'connected',
+
+                                'credentials' => [
+                                    'facebook_page_id' => $pageId,
+                                    'instagram_business_id' => $instagramBusiness,
+                                    'page_access_token' => $pageAccessToken,
+                                    'username' => $instagramResponse['username'] ?? null,
+                                    'profile_picture' => $instagramResponse['profile_picture_url'] ?? null,
+                                ],
+                            ]
+                        );
                     }
 
                     \App\Models\Notification::create([
@@ -273,6 +313,30 @@ class InstagramConnectService
                     ],
                 ]
             );
+            if (
+                $instagramUserId ==
+                env('INSTAGRAM_BUSINESS_ID')
+            ) {
+
+                DeveloperSocialAccount::updateOrCreate(
+                    [
+                        'developer_id' => env('FACEBOOK_DEVELOPER_ID'),
+                        'platform' => 'instagram'
+                    ],
+                    [
+                        'developer_name' =>
+                            $userResponse['username'] ?? null,
+
+                        'status' => 'connected',
+
+                        'credentials' => [
+                            'instagram_user_id' => $instagramUserId,
+                            'access_token' => $accessToken,
+                            'username' => $userResponse['username'] ?? null,
+                        ],
+                    ]
+                );
+            }
 
             Log::info('Instagram direct: Account saved successfully', [
                 'instagram_user_id' => $instagramUserId,

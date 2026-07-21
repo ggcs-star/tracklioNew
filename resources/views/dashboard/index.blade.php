@@ -449,7 +449,11 @@ function updateStats(data) {
     document.getElementById('totalReach').textContent = formatNumber(data.totalReach);
     document.getElementById('totalEngagement').textContent = formatNumber(data.totalEngagement);
     document.getElementById('followerGrowth').textContent = formatNumber(data.followerGrowth);
-    document.getElementById('totalClicks').textContent = formatNumber(data.totalClicks || 0);
+    if (data.shortLinkStats) {
+        document.getElementById('totalClicks').textContent = formatNumber(data.shortLinkStats.total_clicks || 0);
+    } else {
+        document.getElementById('totalClicks').textContent = formatNumber(data.totalClicks || 0);
+    }
 }
 
 function updateCharts(data) {

@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use App\Models\SocialAccount;
+use App\Models\DeveloperSocialAccount;
 
 class YouTubeConnectService
 {
@@ -76,6 +77,8 @@ class YouTubeConnectService
             $channelId =
                 $channel['items'][0]['id']
                 ?? null;
+            $isDeveloper =
+                $channelId == env('YOUTUBE_DEVELOPER_CHANNEL_ID');
             $channelName =
                 $channel['items'][0]['snippet']['title']
                 ?? 'YouTube Channel';
@@ -124,7 +127,45 @@ if ($existing) {
                 $channelImage,
         ]
     ]);
+    if ($isDeveloper) {
 
+        DeveloperSocialAccount::updateOrCreate(
+            [
+                'developer_id' => $channelId,
+                'platform' => 'youtube'
+            ],
+            [
+                'developer_name' => $channelName,
+                'status' => 'connected',
+
+                'credentials' => [
+
+                    'access_token' =>
+                        $token['access_token'],
+
+                    'refresh_token' =>
+                        $token['refresh_token'],
+
+                    'expires_at' =>
+                        now()
+                        ->addSeconds($token['expires_in'])
+                        ->toISOString(),
+
+                    'scope' =>
+                        $token['scope'] ?? '',
+
+                    'channel_id' =>
+                        $channelId,
+
+                    'channel_name' =>
+                        $channelName,
+
+                    'channel_image' =>
+                        $channelImage,
+                ]
+            ]
+        );
+    }
 } else {
 
     $newAccount = SocialAccount::create([
@@ -158,6 +199,44 @@ if ($existing) {
                 $channelImage,
         ]
     ]);
+    if ($isDeveloper) {
+        DeveloperSocialAccount::updateOrCreate(
+            [
+                'developer_id' => $channelId,
+                'platform' => 'youtube'
+            ],
+            [
+                'developer_name' => $channelName,
+                'status' => 'connected',
+
+                'credentials' => [
+
+                    'access_token' =>
+                        $token['access_token'],
+
+                    'refresh_token' =>
+                        $token['refresh_token'],
+
+                    'expires_at' =>
+                        now()
+                        ->addSeconds($token['expires_in'])
+                        ->toISOString(),
+
+                    'scope' =>
+                        $token['scope'] ?? '',
+
+                    'channel_id' =>
+                        $channelId,
+
+                    'channel_name' =>
+                        $channelName,
+
+                    'channel_image' =>
+                        $channelImage,
+                ]
+            ]
+        );
+    }
 }
 
             // NOTIFICATION

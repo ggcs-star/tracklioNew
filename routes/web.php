@@ -215,7 +215,14 @@ Route::post('/short-links', [ShortLinkController::class, 'store']);
 Route::post('/short-links/{id}/update', [ShortLinkController::class, 'update'])->name('short-links.update');
 Route::delete('/short-links/{id}', [ShortLinkController::class, 'destroy'])->name('short-links.destroy');
 Route::get('/short-links/analytics', [ShortLinkController::class, 'analytics'])->name('short-links.analytics');
-
+// WhatsApp Account routes
+Route::prefix('whatsapp-accounts')->group(function () {
+    Route::get('/data', [WhatsAppAccountController::class, 'index']);
+    Route::post('/', [WhatsAppAccountController::class, 'store']);
+    Route::delete('/{id}', [WhatsAppAccountController::class, 'destroy']);
+    Route::post('/refresh-templates', [WhatsAppAccountController::class, 'refreshTemplates']);
+    Route::get('/templates', [WhatsAppAccountController::class, 'getTemplates']);
+});
 Route::get('/qr-links', [QrLinkController::class, 'index'])->name('qr-links.index');
 Route::post('/qr-links', [QrLinkController::class, 'store'])->name('qr-links.store');
 Route::post('/qr-links/{id}/update', [QrLinkController::class, 'update'])->name('qr-links.update');
@@ -229,9 +236,9 @@ Route::get('/calendar/posts',[CalendarController::class, 'posts'])->name('calend
 Route::get('/calendar/post/{id}',[CalendarController::class, 'show'])->name('calendar.post.show');
 Route::get('/contacts', [ContactsController::class, 'index']);
 Route::post('/contacts', [ContactsController::class, 'store']);
-Route::post('/contacts/upload-csv', [ContactsController::class, 'uploadCsv']);
+Route::post('/contacts/upload-csv', [ContactsController::class, 'uploadContacts']);
 Route::get('/contacts-page', function () {return view('contacts.index');});
-
+Route::post('/broadcast-groups/send',[BroadcastGroupController::class,'send']);
 Route::get('/whatsapp-accounts', [WhatsAppAccountController::class, 'page'])->name('whatsapp.accounts');
 Route::get('/whatsapp-accounts/data', [WhatsAppAccountController::class, 'index']);
 Route::post('/whatsapp-accounts', [WhatsAppAccountController::class, 'store']);
@@ -334,3 +341,7 @@ Route::middleware('auth')->group(function () {
 
 Route::post('/map-location', [AjaxSuggestionController::class, 'mapLocation']);
 Route::get('/post/{id}', [App\Http\Controllers\PostController::class, 'show'])->name('post.show');
+
+Route::view('/privacy-policy', 'privacy-policy')->name('privacy.policy');
+Route::view('/terms-and-conditions', 'terms-and-conditions');
+Route::view('/data-deletion', 'data-deletion');

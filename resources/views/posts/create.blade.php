@@ -333,6 +333,16 @@ document.addEventListener('DOMContentLoaded', function() {
     <div id="emojiButtonContainer" style="position: relative; display: inline-block;">
         <button type="button" id="emojiBtn" class="p-2 rounded hover:bg-gray-200">😊</button>
     </div>
+     <!-- <select id="aiToneSelect" class="px-2 py-1 text-xs border rounded-lg bg-white">
+        <option value="professional">Professional</option>
+        <option value="casual">Casual</option>
+        <option value="funny">Funny</option>
+        <option value="inspirational">Inspirational</option>
+    </select> -->
+    <!-- <button type="button" id="aiCaptionBtn" 
+            class="px-3 py-1.5 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 text-white text-sm font-medium hover:scale-105 transition">
+        ✨ AI Caption
+    </button> -->
 </div>
 
         
@@ -397,7 +407,34 @@ document.addEventListener('DOMContentLoaded', function() {
 <!-- Hidden - keep for compatibility -->
 <div id="uploadedPreview" class="hidden"></div>
 </div>
-
+<!-- CROP MODAL -->
+<div id="cropModal" class="hidden fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center">
+    <div class="bg-white rounded-2xl w-[600px] max-w-[90%] max-h-[90vh] overflow-hidden">
+        <div class="flex items-center justify-between px-6 py-4 border-b">
+            <h3 class="text-xl font-semibold">Crop Image</h3>
+            <button type="button" onclick="closeCropModal()" class="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
+        </div>
+        
+        <div class="p-4">
+            <div class="relative bg-black rounded-xl overflow-hidden" style="aspect-ratio: 1/1;">
+                <img id="cropImagePreview" src="" class="w-full h-full object-contain">
+                <div id="cropOverlay" class="absolute inset-0 border-2 border-white pointer-events-none"></div>
+            </div>
+            
+            <div class="flex gap-2 mt-4 overflow-x-auto pb-2">
+                <button type="button" class="crop-ratio-btn px-4 py-2 rounded-full border-2 border-blue-500 bg-blue-50 text-blue-600 font-medium text-sm whitespace-nowrap" data-ratio="original">Original</button>
+                <button type="button" class="crop-ratio-btn px-4 py-2 rounded-full border-2 border-gray-200 hover:border-blue-400 font-medium text-sm whitespace-nowrap" data-ratio="1:1">1:1</button>
+                <button type="button" class="crop-ratio-btn px-4 py-2 rounded-full border-2 border-gray-200 hover:border-blue-400 font-medium text-sm whitespace-nowrap" data-ratio="4:5">4:5</button>
+                <button type="button" class="crop-ratio-btn px-4 py-2 rounded-full border-2 border-gray-200 hover:border-blue-400 font-medium text-sm whitespace-nowrap" data-ratio="16:9">16:9</button>
+            </div>
+            
+            <div class="flex justify-end gap-3 mt-4 pt-4 border-t">
+                <button type="button" onclick="closeCropModal()" class="px-6 py-2 rounded-xl border border-gray-300 hover:bg-gray-50">Cancel</button>
+                <button type="button" onclick="applyCrop()" class="px-6 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 font-medium">Apply</button>
+            </div>
+        </div>
+    </div>
+</div>
 <!-- Hidden single image preview (keep for compatibility) -->
 <!-- <div id="uploadedPreview" class="hidden"></div> -->
 </div>
@@ -1129,7 +1166,8 @@ function renderPreview() {
     if (emptyPreview) emptyPreview.style.display = 'none';
     
     const content = postText ? postText.innerText || '' : '';
-    const mediaFiles = selectedFiles;
+    // 🔥 CHANGE: filePreviews use karo, selectedFiles nahi
+    const mediaFiles = filePreviews;
     
     selected.forEach(platform => {
         let html = '';
@@ -1210,13 +1248,14 @@ function renderFacebookPostPreview(content, mediaFiles) {
         
         const displayCount = Math.min(mediaCount, 4);
         for (let i = 0; i < displayCount; i++) {
-            const file = mediaFiles[i];
-            const isVideo = file && file.type && file.type.startsWith('video/');
+            // 🔥 CHANGE: filePreviews[i] directly use karo (mediaFiles already filePreviews hai)
+            // isVideo check hata do ya selectedFiles se check karo
+            const isVideo = selectedFiles[i] && selectedFiles[i].type && selectedFiles[i].type.startsWith('video/');
             mediaHtml += `
                 <div class="facebook-media-item" style="aspect-ratio: ${isVideo ? '9/16' : '1/1'};">
                     ${isVideo ? 
-                        `<video src="${filePreviews[i]}" controls style="width:100%;height:100%;object-fit:cover;"></video>` :
-                        `<img src="${filePreviews[i]}" style="width:100%;height:100%;object-fit:cover;">`
+                        `<video src="${mediaFiles[i]}" controls style="width:100%;height:100%;object-fit:cover;"></video>` :
+                        `<img src="${mediaFiles[i]}" style="width:100%;height:100%;object-fit:cover;">`
                     }
                 </div>
             `;
@@ -1240,7 +1279,9 @@ function renderFacebookPostPreview(content, mediaFiles) {
                 </div>
             </div>
             <div class="facebook-post-content">
-                ${escapeHtml(content) || 'No description provided'}
+                ${content
+                    ? escapeHtml(content).replace(/\n/g, '<br>')
+                    : 'No description provided'}
                 ${mediaHtml}
             </div>
             <div class="facebook-actions">
@@ -1407,7 +1448,9 @@ function renderInstagramPostPreview(content, mediaFiles) {
                 <span style="margin-left:auto;">❤️ 0 likes</span>
             </div>
             <div class="instagram-caption">
-                <strong>${escapeHtml(username)}</strong> ${escapeHtml(content) || 'No caption'}
+                <strong>${escapeHtml(username)}</strong> ${content
+    ? `<span style="white-space: pre-wrap;">${escapeHtml(content)}</span>`
+    : 'No caption'}
             </div>
         </div>
     `;
@@ -1462,7 +1505,9 @@ function renderInstagramReelPreview(content, mediaFiles) {
             </div>
             <div class="reel-overlay">
                 <div class="reel-username">${escapeHtml(username)}</div>
-                <div class="reel-caption">${escapeHtml(content) || 'New reel'}</div>
+                <div class="reel-caption">${content
+    ? `<div style="white-space: pre-wrap;">${escapeHtml(content)}</div>`
+    : 'New reel'}</div>
                 ${locationHtml}
             </div>
             <div class="reel-actions">
@@ -1778,7 +1823,11 @@ const postForm = document.getElementById('postForm');
 if (postForm) {
     postForm.onsubmit = (e) => {
         if (contentInput) contentInput.value = postText ? postText.innerHTML : '';
-        
+        const cropInput = document.createElement('input');
+        cropInput.type = 'hidden';
+        cropInput.name = 'cropped_images';
+        cropInput.value = JSON.stringify(croppedImages);
+        postForm.appendChild(cropInput);
         if (!selected.length) {
             showAlert('Please select at least one platform', 'error');
             e.preventDefault();
@@ -1822,6 +1871,9 @@ if (multiFileInput) {
                 const reader = new FileReader();
                 reader.onload = function(ev) {
                     filePreviews.push(ev.target.result);
+                    // 🆕 Default 'original' set karo
+                    const index = filePreviews.length - 1;
+                    croppedImages[index] = { ratio: 'original', data: ev.target.result };
                     updateMediaGrid();
                     renderPreview();
                 };
@@ -1830,62 +1882,72 @@ if (multiFileInput) {
                 showAlert(`${file.name} is not an image or video`, 'error');
             }
         });
-        const dt = new DataTransfer();
-
-        selectedFiles.forEach(file => {
-            dt.items.add(file);
-        });
-
-        multiFileInput.files = dt.files;
     });
-    
 }
+// function updateMediaGrid() {
+//     if (!previewGrid) return;
+    
+//     const mediaCountElem = document.getElementById('mediaCount');
+//     if (mediaCountElem) mediaCountElem.innerText = `${filePreviews.length}/10`;
+    
+//     if (filePreviews.length === 0) {
+//         previewGrid.innerHTML = '';
+//         if (addMoreBtn) addMoreBtn.classList.add('hidden');
+//         renderPreview();
+//         return;
+//     }
+    
+//     if (addMoreBtn) addMoreBtn.classList.remove('hidden');
+    
+//     let html = '';
+//     filePreviews.forEach((src, index) => {
+//         const file = selectedFiles[index];
+//         const isVideo = file && file.type && file.type.startsWith('video/');
+//         const currentRatio = croppedImages[index]?.ratio || 'original';
+        
+//         html += `
+//             <div class="relative aspect-square rounded-xl overflow-hidden border bg-gray-100">
+//                 ${isVideo ? 
+//                     `<video src="${src}" class="w-full h-full object-cover" muted></video>` : 
+//                     `<img src="${src}" class="w-full h-full object-cover">`
+//                 }
+//                 <button type="button" class="absolute top-1 right-1 w-6 h-6 bg-red-600 rounded-full text-white text-sm hover:bg-red-700 flex items-center justify-center" onclick="removeImage(${index})">×</button>
+//                 <div class="absolute bottom-1 left-1 bg-black/60 text-white text-xs px-2 py-0.5 rounded-full">${isVideo ? '🎬' : (index + 1)}</div>
+                
+//                 <!-- 🆕 RATIO BUTTONS -->
+//                 <div class="absolute bottom-1 right-1 flex gap-1 bg-black/60 rounded-lg p-1">
+//                     <button type="button" class="ratio-btn text-xs px-2 py-0.5 rounded ${currentRatio === 'original' ? 'bg-blue-500 text-white' : 'text-white hover:bg-white/20'}" data-index="${index}" data-ratio="original">Orig</button>
+//                     <button type="button" class="ratio-btn text-xs px-2 py-0.5 rounded ${currentRatio === '1:1' ? 'bg-blue-500 text-white' : 'text-white hover:bg-white/20'}" data-index="${index}" data-ratio="1:1">1:1</button>
+//                     <button type="button" class="ratio-btn text-xs px-2 py-0.5 rounded ${currentRatio === '4:5' ? 'bg-blue-500 text-white' : 'text-white hover:bg-white/20'}" data-index="${index}" data-ratio="4:5">4:5</button>
+//                     <button type="button" class="ratio-btn text-xs px-2 py-0.5 rounded ${currentRatio === '16:9' ? 'bg-blue-500 text-white' : 'text-white hover:bg-white/20'}" data-index="${index}" data-ratio="16:9">16:9</button>
+//                 </div>
+//             </div>
+//         `;
+//     });
+//     previewGrid.innerHTML = html;
+//     renderPreview();
+    
+//     // 🆕 Ratio button click handlers
+//     document.querySelectorAll('.ratio-btn').forEach(btn => {
+//         btn.addEventListener('click', function(e) {
+//             e.stopPropagation();
+//             const index = parseInt(this.dataset.index);
+//             const ratio = this.dataset.ratio;
+//             applyCropFromGrid(index, ratio);
+//         });
+//     });
+// }
 
-function updateMediaGrid() {
-    if (!previewGrid) return;
+// window.removeImage = function(index) {
+//     selectedFiles.splice(index, 1);
+//     filePreviews.splice(index, 1);
     
-    const mediaCountElem = document.getElementById('mediaCount');
-    if (mediaCountElem) mediaCountElem.innerText = `${filePreviews.length}/10`;
+//     const dt = new DataTransfer();
+//     selectedFiles.forEach(file => dt.items.add(file));
+//     if (multiFileInput) multiFileInput.files = dt.files;
     
-    if (filePreviews.length === 0) {
-        previewGrid.innerHTML = '';
-        if (addMoreBtn) addMoreBtn.classList.add('hidden');
-        renderPreview();
-        return;
-    }
-    
-    if (addMoreBtn) addMoreBtn.classList.remove('hidden');
-    
-    let html = '';
-    filePreviews.forEach((src, index) => {
-        const file = selectedFiles[index];
-        const isVideo = file && file.type && file.type.startsWith('video/');
-        html += `
-            <div class="relative aspect-square rounded-xl overflow-hidden border bg-gray-100">
-                ${isVideo ? 
-                    `<video src="${src}" class="w-full h-full object-cover" muted></video>` : 
-                    `<img src="${src}" class="w-full h-full object-cover">`
-                }
-                <button type="button" class="absolute top-1 right-1 w-6 h-6 bg-red-600 rounded-full text-white text-sm hover:bg-red-700 flex items-center justify-center" onclick="removeImage(${index})">×</button>
-                <div class="absolute bottom-1 left-1 bg-black/60 text-white text-xs px-2 py-0.5 rounded-full">${isVideo ? '🎬' : (index + 1)}</div>
-            </div>
-        `;
-    });
-    previewGrid.innerHTML = html;
-    renderPreview();
-}
-
-// Remove image
-window.removeImage = function(index) {
-    selectedFiles.splice(index, 1);
-    filePreviews.splice(index, 1);
-    
-    const dt = new DataTransfer();
-    selectedFiles.forEach(file => dt.items.add(file));
-    if (multiFileInput) multiFileInput.files = dt.files;
-    
-    updateMediaGrid();
-};
+//     updateMediaGrid();
+// };
 
 // Schedule box
 const statusSelect = document.querySelector('select[name="status"]');
@@ -2187,5 +2249,350 @@ function escapeHtml(text) {
     div.textContent = text;
     return div.innerHTML;
 }
+// 🆕 CROP FUNCTIONS
+let cropIndex = -1;
+let cropImageSrc = '';
+let selectedRatio = 'original';
+let croppedImages = {};
+
+function openCropModal(index) {
+    cropIndex = index;
+    cropImageSrc = filePreviews[index];
+    document.getElementById('cropImagePreview').src = cropImageSrc;
+    document.getElementById('cropModal').classList.remove('hidden');
+    selectedRatio = 'original';
+    updateCropOverlay('original');
+    
+    document.querySelectorAll('.crop-ratio-btn').forEach(btn => {
+        btn.classList.remove('border-blue-500', 'bg-blue-50', 'text-blue-600');
+        btn.classList.add('border-gray-200');
+    });
+    document.querySelector('[data-ratio="original"]').classList.add('border-blue-500', 'bg-blue-50', 'text-blue-600');
+    document.querySelector('[data-ratio="original"]').classList.remove('border-gray-200');
+}
+
+function closeCropModal() {
+    document.getElementById('cropModal').classList.add('hidden');
+    cropIndex = -1;
+}
+
+function updateCropOverlay(ratio) {
+    const overlay = document.getElementById('cropOverlay');
+    if (ratio === 'original') {
+        overlay.style.border = '2px solid white';
+        overlay.style.background = 'none';
+        overlay.style.clipPath = 'none';
+        return;
+    }
+    
+    const container = overlay.parentElement;
+    const containerWidth = container.clientWidth;
+    const containerHeight = container.clientHeight;
+    const [w, h] = ratio.split(':').map(Number);
+    
+    let width, height;
+    if (w/h > 1) {
+        width = containerWidth * 0.9;
+        height = width * (h/w);
+    } else {
+        height = containerHeight * 0.9;
+        width = height * (w/h);
+    }
+    
+    const left = (containerWidth - width) / 2;
+    const top = (containerHeight - height) / 2;
+    
+    overlay.style.border = '2px solid white';
+    overlay.style.background = 'rgba(0,0,0,0.5)';
+    overlay.style.clipPath = `inset(${top}px ${containerWidth - left - width}px ${containerHeight - top - height}px ${left}px)`;
+}
+
+function applyCrop() {
+    if (selectedRatio === 'original') {
+        croppedImages[cropIndex] = { ratio: 'original', data: filePreviews[cropIndex] };
+    } else {
+        const canvas = document.createElement('canvas');
+        const img = new Image();
+        img.onload = function() {
+            const [w, h] = selectedRatio.split(':').map(Number);
+            let cropWidth, cropHeight, x, y;
+            
+            if (w/h > 1) {
+                cropWidth = img.width;
+                cropHeight = img.width * (h/w);
+                x = 0;
+                y = (img.height - cropHeight) / 2;
+            } else {
+                cropHeight = img.height;
+                cropWidth = img.height * (w/h);
+                x = (img.width - cropWidth) / 2;
+                y = 0;
+            }
+            
+            canvas.width = cropWidth;
+            canvas.height = cropHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, x, y, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
+            
+            const croppedData = canvas.toDataURL('image/jpeg', 0.92);
+            croppedImages[cropIndex] = { ratio: selectedRatio, data: croppedData };
+            filePreviews[cropIndex] = croppedData;
+            
+            updateMediaGrid();
+            renderPreview();
+            closeCropModal();
+        };
+        img.src = cropImageSrc;
+        return;
+    }
+    
+    updateMediaGrid();
+    renderPreview();
+    closeCropModal();
+}
+
+// Crop ratio button clicks
+document.addEventListener('click', function(e) {
+    const btn = e.target.closest('.crop-ratio-btn');
+    if (!btn) return;
+    
+    document.querySelectorAll('.crop-ratio-btn').forEach(b => {
+        b.classList.remove('border-blue-500', 'bg-blue-50', 'text-blue-600');
+        b.classList.add('border-gray-200');
+    });
+    btn.classList.add('border-blue-500', 'bg-blue-50', 'text-blue-600');
+    btn.classList.remove('border-gray-200');
+    
+    selectedRatio = btn.dataset.ratio;
+    updateCropOverlay(selectedRatio);
+});
+function applyCropFromGrid(index, ratio) {
+    console.log('Applying crop:', index, ratio);
+    
+    if (ratio === 'original') {
+        const originalData = filePreviews[index];
+        croppedImages[index] = { ratio: 'original', data: originalData };
+        updateMediaGrid();
+        renderPreview();
+        return;
+    }
+    
+    const img = new Image();
+    img.onload = function() {
+        const canvas = document.createElement('canvas');
+        const [w, h] = ratio.split(':').map(Number);
+        let cropWidth, cropHeight, x, y;
+        
+        if (w/h > 1) {
+            cropWidth = img.width;
+            cropHeight = img.width * (h/w);
+            x = 0;
+            y = (img.height - cropHeight) / 2;
+        } else {
+            cropHeight = img.height;
+            cropWidth = img.height * (w/h);
+            x = (img.width - cropWidth) / 2;
+            y = 0;
+        }
+        
+        canvas.width = cropWidth;
+        canvas.height = cropHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, x, y, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
+        
+        const croppedData = canvas.toDataURL('image/jpeg', 0.92);
+        croppedImages[index] = { ratio: ratio, data: croppedData };
+        filePreviews[index] = croppedData;
+        
+        updateMediaGrid();
+        renderPreview();
+    };
+    
+    if (selectedFiles[index]) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            img.src = e.target.result;
+        };
+        reader.readAsDataURL(selectedFiles[index]);
+    }
+}
+// ============ GLOBAL FUNCTIONS (DOMContentLoaded ke bahar) ============
+
+function updateMediaGrid() {
+    const previewGrid = document.getElementById('mediaPreviewGrid');
+    const addMoreBtn = document.getElementById('addMoreBtn');
+    if (!previewGrid) return;
+    
+    const mediaCountElem = document.getElementById('mediaCount');
+    if (mediaCountElem) mediaCountElem.innerText = `${filePreviews.length}/10`;
+    
+    if (filePreviews.length === 0) {
+        previewGrid.innerHTML = '';
+        if (addMoreBtn) addMoreBtn.classList.add('hidden');
+        renderPreview();
+        return;
+    }
+    
+    if (addMoreBtn) addMoreBtn.classList.remove('hidden');
+    
+    let html = '';
+    filePreviews.forEach((src, index) => {
+        const file = selectedFiles[index];
+        const isVideo = file && file.type && file.type.startsWith('video/');
+        const currentRatio = croppedImages[index]?.ratio || 'original';
+        
+        html += `
+            <div class="relative aspect-square rounded-xl overflow-hidden border bg-gray-100">
+                ${isVideo ? 
+                    `<video src="${src}" class="w-full h-full object-cover" muted></video>` : 
+                    `<img src="${src}" class="w-full h-full object-cover">`
+                }
+                <button type="button" class="absolute top-1 right-1 w-6 h-6 bg-red-600 rounded-full text-white text-sm hover:bg-red-700 flex items-center justify-center" onclick="removeImage(${index})">×</button>
+                <div class="absolute bottom-1 left-1 bg-black/60 text-white text-xs px-2 py-0.5 rounded-full">${isVideo ? '🎬' : (index + 1)}</div>
+                
+                <div class="absolute bottom-1 right-1 flex gap-1 bg-black/60 rounded-lg p-1">
+                    <button type="button" class="ratio-btn text-xs px-2 py-0.5 rounded ${currentRatio === 'original' ? 'bg-blue-500 text-white' : 'text-white hover:bg-white/20'}" data-index="${index}" data-ratio="original">Orig</button>
+                    <button type="button" class="ratio-btn text-xs px-2 py-0.5 rounded ${currentRatio === '1:1' ? 'bg-blue-500 text-white' : 'text-white hover:bg-white/20'}" data-index="${index}" data-ratio="1:1">1:1</button>
+                    <button type="button" class="ratio-btn text-xs px-2 py-0.5 rounded ${currentRatio === '4:5' ? 'bg-blue-500 text-white' : 'text-white hover:bg-white/20'}" data-index="${index}" data-ratio="4:5">4:5</button>
+                    <button type="button" class="ratio-btn text-xs px-2 py-0.5 rounded ${currentRatio === '16:9' ? 'bg-blue-500 text-white' : 'text-white hover:bg-white/20'}" data-index="${index}" data-ratio="16:9">16:9</button>
+                </div>
+            </div>
+        `;
+    });
+    previewGrid.innerHTML = html;
+    renderPreview();
+    
+    document.querySelectorAll('.ratio-btn').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            const index = parseInt(this.dataset.index);
+            const ratio = this.dataset.ratio;
+            applyCropFromGrid(index, ratio);
+        });
+    });
+}
+
+// ============ removeImage (global) ============
+window.removeImage = function(index) {
+    selectedFiles.splice(index, 1);
+    filePreviews.splice(index, 1);
+    
+    const dt = new DataTransfer();
+    selectedFiles.forEach(file => dt.items.add(file));
+    const multiFileInput = document.getElementById('imageInput');
+    if (multiFileInput) multiFileInput.files = dt.files;
+    
+    updateMediaGrid();
+};
+// ============================================
+// 🆕 AI CAPTION GENERATOR
+// ============================================
+
+document.getElementById('aiCaptionBtn')?.addEventListener('click', async function() {
+    const btn = this;
+    
+    if (filePreviews.length === 0) {
+        showAlert('📸 Please upload an image first!', 'error');
+        return;
+    }
+    
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '⏳ Generating...';
+    btn.disabled = true;
+    
+    try {
+        const platforms = selected.length ? selected : ['facebook', 'instagram'];
+        const tone = document.getElementById('aiToneSelect')?.value || 'professional';
+        
+        const response = await fetch('{{ url("/api/ai/caption") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || ''
+            },
+            body: JSON.stringify({
+                image: filePreviews[0],
+                platforms: platforms,
+                tone: tone
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success && data.captions) {
+            showCaptionOptions(data.captions, data.hashtags);
+        } else {
+            showAlert('Failed to generate caption. Try again!', 'error');
+        }
+    } catch (error) {
+        showAlert('Something went wrong!', 'error');
+    } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    }
+});
+
+function showCaptionOptions(captions, hashtags) {
+    const modal = document.createElement('div');
+    modal.className = 'fixed inset-0 bg-black/50 z-50 flex items-center justify-center';
+    modal.id = 'captionOptionsModal';
+    
+    let html = `
+        <div class="bg-white rounded-2xl p-6 max-w-2xl w-[90%] max-h-[80vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold">✨ Choose a Caption</h3>
+                <button onclick="this.closest('#captionOptionsModal').remove()" class="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
+            </div>
+            <div class="space-y-3">
+    `;
+    
+    captions.forEach((caption, index) => {
+        html += `
+            <div onclick="selectCaption('${escapeHtml(caption)}', ${JSON.stringify(hashtags || []).replace(/"/g, '&quot;')})" 
+                 class="p-4 border rounded-xl hover:border-purple-500 hover:bg-purple-50 cursor-pointer transition">
+                <p class="text-gray-800">${escapeHtml(caption)}</p>
+            </div>
+        `;
+    });
+    
+    if (hashtags && hashtags.length) {
+        html += `
+            <div class="mt-4 pt-4 border-t">
+                <p class="text-sm text-gray-500 mb-2">📌 Hashtags:</p>
+                <div class="flex flex-wrap gap-2">
+                    ${hashtags.map(tag => `<span class="px-3 py-1 bg-purple-50 text-purple-700 rounded-full text-sm">#${escapeHtml(tag)}</span>`).join('')}
+                </div>
+            </div>
+        `;
+    }
+    
+    html += `
+            </div>
+        </div>
+    `;
+    
+    modal.innerHTML = html;
+    document.body.appendChild(modal);
+}
+
+function selectCaption(caption, hashtags) {
+    const editor = document.getElementById('postText');
+    let finalText = caption;
+    if (hashtags && hashtags.length) {
+        finalText += '\n\n' + hashtags.map(tag => '#' + tag).join(' ');
+    }
+    editor.innerText = finalText;
+    editor.dispatchEvent(new Event('input'));
+    document.getElementById('captionOptionsModal')?.remove();
+    showAlert('✅ Caption added!', 'success');
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
 </script>
+
 @endpush

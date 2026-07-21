@@ -74,10 +74,25 @@ class TextFormatter
             return self::applyMapping($m[1], self::$italic);
         }, $text);
         
-        // Remove any remaining HTML tags (like <div>, <br>, etc.)
-        $text = strip_tags($text);
-        
-        return $text;
+// Preserve line breaks
+$text = preg_replace('/<br\s*\/?>/i', "\n", $text);
+$text = preg_replace('/<\/div>/i', "\n", $text);
+$text = preg_replace('/<\/p>/i', "\n", $text);
+
+// Remove opening tags
+$text = preg_replace('/<div[^>]*>/i', '', $text);
+$text = preg_replace('/<p[^>]*>/i', '', $text);
+// Remove remaining html
+$text = strip_tags($text);
+
+// Decode html entities
+$text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5);
+
+// Remove extra blank lines
+$text = preg_replace("/\r\n|\r/", "\n", $text);
+$text = preg_replace("/\n{3,}/", "\n\n", $text);
+
+return trim($text);
     }
     
     private static function applyMapping($text, $map)

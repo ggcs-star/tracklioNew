@@ -610,6 +610,7 @@
         <div class="omnipost-stat-number">{{ number_format($comments ?? 0) }}</div>
         <div class="omnipost-stat-label">Total Comments</div>
     </div>
+    
     @elseif($platform === 'instagram')
     <!-- Instagram Stats -->
     <div class="omnipost-stat-card">

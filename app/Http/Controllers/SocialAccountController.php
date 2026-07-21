@@ -111,6 +111,40 @@ class SocialAccountController extends Controller
     }
    public function disconnect(Request $request)
     {
+        if ($request->platform === 'facebook') {
+
+            $account = SocialAccount::where('user_id', auth()->id())
+                ->where('platform', 'facebook')
+                ->first();
+
+            if ($account) {
+
+                $pages = collect($account->pages)
+                    ->reject(function ($page) use ($request) {
+                        return $page['page_id'] == $request->page_id;
+                    })
+                    ->values()
+                    ->toArray();
+
+                if (count($pages) > 0) {
+
+                    $account->update([
+                        'pages' => $pages
+                    ]);
+
+                } else {
+
+                    $account->delete();
+
+                }
+            }
+
+            return back()->with(
+                'success',
+                'Facebook page disconnected successfully'
+            );
+        }
+
         SocialAccount::where('user_id', auth()->id())
             ->where('id', $request->account_id)
             ->delete();

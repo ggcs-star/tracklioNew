@@ -1103,9 +1103,9 @@
                     <div>
                         <h4 class="font-bold text-white mb-6">Legal</h4>
                         <ul class="space-y-3 text-sm">
-                            <li><a href="#" class="hover:text-white transition-colors">Privacy Policy</a></li>
-                            <li><a href="#" class="hover:text-white transition-colors">Terms of Service</a></li>
-                            <li><a href="#" class="hover:text-white transition-colors">Cookie Policy</a></li>
+                            <li><a href="/privacy-policy" class="hover:text-white transition-colors">Privacy Policy</a></li>
+                            <li><a href="/terms-and-conditions" class="hover:text-white transition-colors">Terms of Service</a></li>
+                            <li><a href="/data-deletion" class="hover:text-white transition-colors">Data Deletion</a></li>
                         </ul>
                     </div>
                 </div>
