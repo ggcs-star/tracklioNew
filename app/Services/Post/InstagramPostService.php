@@ -9,7 +9,7 @@ use App\Models\Post;
 use App\Models\SocialAccount;
 use Cloudinary\Cloudinary;
 use App\Helpers\TextFormatter;
-
+use Illuminate\Support\Facades\Log;
 class InstagramPostService
 {
     protected string $fbVersion = 'v25.0';
@@ -68,24 +68,55 @@ class InstagramPostService
 
         $transformation = [];
 
-        if ($postType === 'story' || $postType === 'reel') {
+if ($postType === 'story' || $postType === 'reel') {
 
-            $transformation = [
-                'aspect_ratio' => '9:16',
-                'crop' => 'fill',
-                'width' => 1080,
-                'height' => 1920
-            ];
+    $transformation = [
+        'aspect_ratio' => '9:16',
+        'crop' => 'fill',
+        'width' => 1080,
+        'height' => 1920,
+    ];
 
-        } else {
+} else {
 
-            // Feed post - original ratio preserve rahega
-            $transformation = [
-                'crop' => 'limit',
-                'width' => 1080
-            ];
+    // Instagram Feed Post
+    // Check user's selected image ratio
 
-        }
+   $croppedImages = json_decode(
+    $request->input('cropped_images', '{}'),
+    true
+);
+
+$selectedRatio = 'original';
+
+if (is_array($croppedImages) && !empty($croppedImages)) {
+    $firstImage = reset($croppedImages);
+
+    if (is_array($firstImage)) {
+        $selectedRatio = $firstImage['ratio'] ?? 'original';
+    }
+}
+
+Log::info('Instagram selected ratio', [
+    'ratio' => $selectedRatio,
+]);
+
+if ($selectedRatio === 'original') {
+
+    $transformation = [
+        'width' => 1080,
+        'height' => 1350,
+        'crop' => 'pad',
+        'background' => 'white',
+    ];
+
+} else {
+
+    // 1:1 / 4:5 / 16:9
+    // Frontend selected ratio already handle kar raha hai
+    $transformation = [];
+}
+}
 
         $uploadResult = $cloudinary->uploadApi()->upload($fullPath, [
             'folder' => 'instagram',
@@ -110,10 +141,22 @@ class InstagramPostService
                     throw new \Exception('Instagram carousel supports only images');
                 }
                 
+                $carouselTransformation = [];
+
+                if ($selectedRatio === 'original') {
+
+                    $carouselTransformation = [
+                        'width' => 1080,
+                        'height' => 1350,
+                        'crop' => 'pad',
+                        'background' => 'rgb:ffffff',
+                    ];
+                }
+
                 $uploadResult = $cloudinary->uploadApi()->upload($fullPath, [
                     'folder' => 'instagram',
                     'resource_type' => 'image',
-                    'transformation' => ['crop' => 'limit','width' => 1080]
+                    'transformation' => $carouselTransformation
                 ]);
                 
                 $imageUrl = $uploadResult['secure_url'];
@@ -211,7 +254,7 @@ class InstagramPostService
             );
             
             if (!$create->successful()) {
-                throw new \Exception("Story container failed: " . $create->body());
+                $this->throwInstagramError($create);
             }
             
             $containerId = $create['id'];
@@ -302,7 +345,7 @@ class InstagramPostService
         );
 
         if (!$create->successful()) {
-            throw new \Exception($create->body());
+            $this->throwInstagramError($create);
         }
 
         $creationId = $create['id'];
@@ -380,4 +423,31 @@ class InstagramPostService
         $post->save();
     }
         }
+        private function throwInstagramError($response): void
+{
+    $error = $response->json('error', []);
+
+    Log::error('Instagram API Error', [
+        'status' => $response->status(),
+        'error' => $error,
+    ]);
+
+    $code = $error['code'] ?? null;
+
+    if ($code == 190) {
+        throw new \Exception(
+            'Your Instagram connection has expired. Please reconnect your Instagram account.'
+        );
+    }
+
+    if ($code == 200) {
+        throw new \Exception(
+            'Instagram permissions are missing. Please reconnect your Instagram account.'
+        );
+    }
+
+    throw new \Exception(
+        $error['message'] ?? 'Instagram request failed.'
+    );
+}
     }

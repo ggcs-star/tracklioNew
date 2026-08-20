@@ -1,4 +1,5 @@
 <?php
+// app/Http/Controllers/DashboardController.php
 
 namespace App\Http\Controllers;
 
@@ -7,8 +8,7 @@ use App\Services\AnalyticsService;
 use App\Models\SocialAccount;
 use App\Models\ShortLink;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Http;
-use App\Models\DashboardAnalytics;
+use Illuminate\Support\Facades\Cache;
 
 class DashboardController extends Controller
 {
@@ -31,6 +31,7 @@ class DashboardController extends Controller
                 ->where('platform', 'youtube')
                 ->where('status', 'connected')
                 ->get();
+                
             $shortLinks = ShortLink::where('user_id', $userId)->get();
             $shortLinkStats = [
                 'total_links' => $shortLinks->count(),
@@ -38,6 +39,7 @@ class DashboardController extends Controller
                 'most_clicked' => $shortLinks->max('click_count') ?? 0,
                 'top_link' => $shortLinks->sortByDesc('click_count')->first(),
             ];
+            
             return view('dashboard.index', [
                 'shortLinkStats' => $shortLinkStats,
                 'facebookPages' => $facebookAccount->pages ?? [],
@@ -75,38 +77,33 @@ class DashboardController extends Controller
             $youtubeChannel = $request->get('youtube_channel', 'all');
             $range = $request->get('range', '7');
             $metric = $request->get('metric', 'reach');
+            $forceRefresh = $request->get('refresh', false);
 
             $days = $range === 'today' ? 1 : (int) $range;
 
-            $analyticsService = new AnalyticsService();
-            $data = $analyticsService->getAllAnalytics($userId, $platform, $pageId, $days, $instagramProfile, $youtubeChannel);
+            $cacheKey = "dashboard_live_{$userId}_{$platform}_{$pageId}_{$instagramProfile}_{$youtubeChannel}_{$days}_{$metric}";
+            
+            if ($forceRefresh) {
+                Cache::forget($cacheKey);
+            }
+            
+            $cachedData = Cache::get($cacheKey);
+            
+            if ($cachedData) {
+                return response()->json($cachedData);
+            }
 
-            DashboardAnalytics::updateOrCreate(
-                [
-                    'user_id' => $userId,
-                    'created_at' => now()->toDateString()
-                ],
-                [
-                    'stats' => [
-                        'reach' => $data['totalReach'],
-                        'engagement' => $data['totalEngagement'],
-                        'followers' => $data['followerGrowth']
-                    ],
-                    'weekly' => [
-                        'labels' => $data['labels'],
-                        'engagementData' => $data['engagementData'],
-                        'reachData' => $data['reachData']
-                    ],
-                    'performance' => [
-                        'platformReach' => $data['platformReach'],
-                        'platformEngagement' => $data['platformEngagement']
-                    ],
-                    'updated_at' => now()
-                ]
+            $analyticsService = new AnalyticsService();
+            $data = $analyticsService->getAllAnalytics(
+                $userId, 
+                $platform, 
+                $pageId, 
+                $days, 
+                $instagramProfile, 
+                $youtubeChannel
             );
 
-            $labelsCount = count($data['labels']);
-            
+            $labelsCount = count($data['labels'] ?? []);
             $engagementData = array_pad($data['engagementData'] ?? [], $labelsCount, 0);
             $likesData = array_pad($data['likesData'] ?? [], $labelsCount, 0);
             $sharesData = array_pad($data['sharesData'] ?? [], $labelsCount, 0);
@@ -116,36 +113,47 @@ class DashboardController extends Controller
             if ($metric === 'likes') $chartData = $likesData;
             if ($metric === 'shares') $chartData = $sharesData;
 
-            $shortLinks = ShortLink::where('user_id', $userId)->get();
+            $shortLinkCacheKey = "short_links_{$userId}";
+            $shortLinks = Cache::remember($shortLinkCacheKey, 3600, function () use ($userId) {
+                return ShortLink::where('user_id', $userId)->get();
+            });
+            
             $shortLinkStats = [
                 'total_links' => $shortLinks->count(),
                 'total_clicks' => $shortLinks->sum('click_count'),
                 'most_clicked' => $shortLinks->max('click_count') ?? 0,
             ];
 
-            return response()->json([
+            $response = [
                 'success' => true,
-                'totalReach' => $data['totalReach'],
-                'totalEngagement' => $data['totalEngagement'],
+                'totalReach' => $data['totalReach'] ?? 0,
+                'totalEngagement' => $data['totalEngagement'] ?? 0,
                 'totalClicks' => $data['totalClicks'] ?? 0,
-                'followerGrowth' => $data['followerGrowth'],
-                'labels' => $data['labels'],
+                'followerGrowth' => $data['followerGrowth'] ?? 0,
+                'labels' => $data['labels'] ?? [],
                 'engagementData' => $engagementData,
                 'likesData' => $likesData,
                 'sharesData' => $sharesData,
                 'reachData' => $reachData,
                 'chartData' => $chartData,
-                'platformReach' => $data['platformReach'],
-                'platformEngagement' => $data['platformEngagement'],
-                'pages' => $data['pages'],
-                'recentActivity' => $data['recentActivity'],
-                'shortLinkStats' => $shortLinkStats,  
-            ]);
+                'platformReach' => $data['platformReach'] ?? [0,0,0],
+                'platformEngagement' => $data['platformEngagement'] ?? [0,0,0],
+                'pages' => $data['pages'] ?? [],
+                'recentActivity' => $data['recentActivity'] ?? [],
+                'shortLinkStats' => $shortLinkStats,
+                'from_cache' => false,
+                'from_db' => true
+            ];
+
+            Cache::put($cacheKey, $response, 3600);
+
+            return response()->json($response);
 
         } catch (\Throwable $e) {
             Log::error('Dashboard live API error', [
                 'user_id' => auth()->id(),
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
             ]);
 
             return response()->json([
@@ -164,65 +172,10 @@ class DashboardController extends Controller
                 'platformEngagement' => [0, 0, 0],
                 'pages' => [],
                 'recentActivity' => [],
-                'shortLinkStats' => ['total_links' => 0, 'total_clicks' => 0, 'most_clicked' => 0],  
+                'shortLinkStats' => ['total_links' => 0, 'total_clicks' => 0, 'most_clicked' => 0],
+                'from_cache' => false,
+                'from_db' => false
             ], 200);
-        }
-    }
-
-    public function refreshTokens(Request $request)
-    {
-        try {
-            $userId = (string) auth()->user()->_id;
-            $platform = $request->get('platform');
-
-            $account = SocialAccount::forUser($userId)
-                ->where('platform', $platform)
-                ->where('status', 'connected')
-                ->first();
-
-            if (!$account) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Account not found'
-                ], 404);
-            }
-
-            if ($platform === 'youtube') {
-                $creds = $account->credentials;
-                
-                $tokenRes = Http::asForm()->post(
-                    'https://oauth2.googleapis.com/token',
-                    [
-                        'client_id' => env('YOUTUBE_CLIENT_ID'),
-                        'client_secret' => env('YOUTUBE_CLIENT_SECRET'),
-                        'refresh_token' => $creds['refresh_token'],
-                        'grant_type' => 'refresh_token',
-                    ]
-                );
-
-                if ($tokenRes->successful()) {
-                    $newToken = $tokenRes->json('access_token');
-                    $creds['access_token'] = $newToken;
-                    $account->credentials = $creds;
-                    $account->save();
-                    
-                    return response()->json([
-                        'success' => true,
-                        'message' => 'Token refreshed successfully'
-                    ]);
-                }
-            }
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Could not refresh token'
-            ]);
-
-        } catch (\Throwable $e) {
-            return response()->json([
-                'success' => false,
-                'message' => $e->getMessage()
-            ], 500);
         }
     }
 }

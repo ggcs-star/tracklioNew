@@ -68,6 +68,19 @@ class FacebookConnectService
             }
 
             $userToken = $tokenResponse['access_token'];
+            $longLivedTokenResponse = Http::timeout(60)->get(
+                "https://graph.facebook.com/{$this->version}/oauth/access_token",
+                [
+                    'grant_type'        => 'fb_exchange_token',
+                    'client_id'         => env('FACEBOOK_CLIENT_ID'),
+                    'client_secret'     => env('FACEBOOK_CLIENT_SECRET'),
+                    'fb_exchange_token' => $userToken,
+                ]
+            )->json();
+
+            if (!empty($longLivedTokenResponse['access_token'])) {
+                $userToken = $longLivedTokenResponse['access_token'];
+            }
             $userInfo = Http::get("https://graph.facebook.com/{$this->version}/me", [
                 'access_token' => $userToken,
                 'fields' => 'id,name'

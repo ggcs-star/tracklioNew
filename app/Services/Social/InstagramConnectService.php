@@ -95,6 +95,20 @@ class InstagramConnectService
             }
 
             $userAccessToken = $tokenResponse['access_token'];
+            $longLivedTokenResponse = Http::get(
+                'https://graph.facebook.com/v19.0/oauth/access_token',
+                [
+                    'grant_type' => 'fb_exchange_token',
+                    'client_id' => env('FACEBOOK_CLIENT_ID'),
+                    'client_secret' => env('FACEBOOK_CLIENT_SECRET'),
+                    'fb_exchange_token' => $userAccessToken,
+                ]
+            )->json();
+            // dd($longLivedTokenResponse);
+
+            if (!empty($longLivedTokenResponse['access_token'])) {
+                $userAccessToken = $longLivedTokenResponse['access_token'];
+            }
 
             $pagesResponse = Http::get(
                 'https://graph.facebook.com/v19.0/me/accounts',

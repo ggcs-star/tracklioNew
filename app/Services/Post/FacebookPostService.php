@@ -72,7 +72,7 @@ class FacebookPostService
                 ]);
                 
                 if (!$res->successful()) {
-                    throw new \Exception($res->json('error.message') ?? 'Carousel post failed');
+                    $this->throwFacebookError($res);
                 }
                 return;
             }
@@ -104,7 +104,7 @@ class FacebookPostService
             );
 
             if (!$res->successful()) {
-                throw new \Exception($res->json('error.message') ?? 'Facebook text post failed');
+                $this->throwFacebookError($res);
             }
             $fbPostId = $res->json('id');
             $post->facebook_post_id = $fbPostId;
@@ -340,12 +340,40 @@ class FacebookPostService
             }
         }
 
-        if (!$res->successful()) {
-            throw new \Exception(
-                $res->json('error.message') ?? 'Facebook media upload failed'
-            );
-        }
+       if (!$res->successful()) {
+    $this->throwFacebookError($res);
+}
+    }
+private function throwFacebookError($response): void
+{
+    $error = $response->json('error', []);
+
+    Log::error('Facebook API Error', [
+        'status' => $response->status(),
+        'error'  => $error,
+    ]);
+
+    $code = $error['code'] ?? null;
+    $subCode = $error['error_subcode'] ?? null;
+
+    // Token expired / invalid
+    if ($code == 190) {
+        throw new \Exception(
+            'Your Facebook connection has expired. Please reconnect your Facebook account and try again.'
+        );
     }
 
+    // Missing permissions
+    if ($code == 200) {
+        throw new \Exception(
+            'Facebook permissions are missing. Please reconnect your Facebook account.'
+        );
+    }
+
+    // Generic message
+    throw new \Exception(
+        $error['message'] ?? 'Facebook request failed.'
+    );
+}
     
 }
