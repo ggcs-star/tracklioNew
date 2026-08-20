@@ -1,4 +1,5 @@
 <?php
+// app/Jobs/FetchFacebookHourlyStats.php
 
 namespace App\Jobs;
 
@@ -10,73 +11,106 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Http;
+use Carbon\Carbon;
 
 class FetchFacebookHourlyStats implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    protected string $fbVersion = 'v24.0';
+    protected string $fbVersion = 'v26.0';
 
     public function handle()
     {
-        $time = now()->subHour();
-        $date = $time->toDateString();
-        $hour = $time->hour;
+        $now = now();
+        $date = $now->toDateString();
+        $hour = $now->hour;
 
         // ========== 1. FACEBOOK ==========
-        $fbAccounts = SocialAccount::where('platform', 'facebook')
+                $fbAccounts = SocialAccount::where('platform', 'facebook')
             ->where('status', 'connected')
             ->get();
 
         foreach ($fbAccounts as $account) {
+            if (empty($account->pages)) continue;
+
             foreach ($account->pages as $page) {
-                $pageId = $page['page_id'];
-                $token = $page['page_access_token'];
+                $pageId = $page['page_id'] ?? null;
+                
+                $token = $page['page_access_token'] ?? $account->credentials['user_access_token'] ?? null;
+                
+                if (empty($token)) {
+                    $token = $page['access_token'] ?? null;
+                }
+                
+                if (empty($token)) {
+                    $token = $account->credentials['access_token'] ?? null;
+                }
 
                 if (!$pageId || !$token) continue;
 
-                $info = Http::get("https://graph.facebook.com/{$this->fbVersion}/{$pageId}", [
-                    'fields' => 'followers_count',
-                    'access_token' => $token
-                ])->json();
+                try {
+                    $info = Http::timeout(30)->get("https://graph.facebook.com/v19.0/{$pageId}", [
+                        'fields' => 'followers_count,fan_count',
+                        'access_token' => $token
+                    ])->json();
 
-                $eng = Http::get("https://graph.facebook.com/{$this->fbVersion}/{$pageId}/insights", [
-                    'metric' => 'page_post_engagements',
-                    'period' => 'day',
-                    'since' => $date,
-                    'until' => $date,
-                    'access_token' => $token
-                ])->json();
+                    $followers = (int) ($info['followers_count'] ?? $info['fan_count'] ?? 0);
 
-                $engagement = collect($eng['data'][0]['values'] ?? [])->sum('value');
+                    $totalReach = 0;
+                    $totalEngagement = 0;
 
-                $reachRes = Http::get("https://graph.facebook.com/{$this->fbVersion}/{$pageId}/insights", [
-                    'metric' => 'page_impressions_unique',
-                    'period' => 'day',
-                    'since' => $date,
-                    'until' => $date,
-                    'access_token' => $token
-                ])->json();
+                    for ($i = 29; $i >= 0; $i--) {
+                        $targetDate = Carbon::now()->subDays($i)->toDateString();
 
-                $reach = collect($reachRes['data'][0]['values'] ?? [])->sum('value');
+                        // REACH: Using page_impressions for better compatibility
+                        $reachRes = Http::timeout(30)->get("https://graph.facebook.com/v19.0/{$pageId}/insights", [
+                            'metric' => 'page_impressions',
+                            'period' => 'day',
+                            'since' => $targetDate,
+                            'until' => $targetDate,
+                            'access_token' => $token
+                        ])->json();
 
-                SocialHourlyStat::updateOrCreate(
-                    [
-                        'platform' => 'facebook',
-                        'page_id' => $pageId,
-                        'stat_date' => $date,
-                        'stat_hour' => $hour,
-                    ],
-                    [
-                        'user_id' => (string) $account->user_id,
-                        'reach' => (int) $reach,
-                        'engagement' => (int) $engagement,
-                        'followers' => (int) ($info['followers_count'] ?? 0),
-                    ]
-                );
+                        if (!isset($reachRes['error']) && !empty($reachRes['data'])) {
+                            $val = $reachRes['data'][0]['values'][0]['value'] ?? 0;
+                            $totalReach += (int) $val;
+                        }
+
+                        // ENGAGEMENT
+                        $engRes = Http::timeout(30)->get("https://graph.facebook.com/v19.0/{$pageId}/insights", [
+                            'metric' => 'page_engaged_users',
+                            'period' => 'day',
+                            'since' => $targetDate,
+                            'until' => $targetDate,
+                            'access_token' => $token
+                        ])->json();
+
+                        if (!isset($engRes['error']) && !empty($engRes['data'])) {
+                            $val = $engRes['data'][0]['values'][0]['value'] ?? 0;
+                            $totalEngagement += (int) $val;
+                        }
+                    }
+
+                    SocialHourlyStat::updateOrCreate(
+                        [
+                            'platform' => 'facebook',
+                            'page_id' => $pageId,
+                            'stat_date' => $date,
+                            'stat_hour' => $hour,
+                        ],
+                        [
+                            'user_id' => (string) $account->user_id,
+                            'reach' => (int) $totalReach,
+                            'engagement' => (int) $totalEngagement,
+                            'followers' => (int) $followers,
+                        ]
+                    );
+
+                } catch (\Throwable $e) {
+                    \Log::error('Facebook fetch failed: ' . $e->getMessage());
+                }
             }
         }
-
         // ========== 2. INSTAGRAM ==========
         $igAccounts = SocialAccount::where('platform', 'instagram')
             ->where('status', 'connected')
@@ -84,38 +118,60 @@ class FetchFacebookHourlyStats implements ShouldQueue
 
         foreach ($igAccounts as $account) {
             $businessId = $account->credentials['instagram_business_id'] ?? null;
-            $token = $account->credentials['page_access_token'] ?? null;
+            $token = $account->credentials['page_access_token'] ?? $account->credentials['access_token'] ?? null;
 
             if (!$businessId || !$token) continue;
 
             try {
-                $profile = Http::get("https://graph.facebook.com/{$this->fbVersion}/{$businessId}", [
+                $profile = Http::timeout(30)->get("https://graph.facebook.com/{$this->fbVersion}/{$businessId}", [
                     'fields' => 'followers_count,username',
                     'access_token' => $token
                 ])->json();
 
-                $followers = $profile['followers_count'] ?? 0;
+                if (isset($profile['error'])) continue;
 
-                $insights = Http::get("https://graph.facebook.com/{$this->fbVersion}/{$businessId}/insights", [
-                    'metric' => 'reach,likes,comments',
-                    'period' => 'day',
-                    'since' => $date,
-                    'until' => $date,
-                    'access_token' => $token
-                ])->json();
+                $followers = (int) ($profile['followers_count'] ?? 0);
+
+                $endDate = now()->toDateString();
+                $startDate = now()->subDays(7)->toDateString();
+
+                $reachRes = Http::timeout(30)->get(
+                    "https://graph.facebook.com/{$this->fbVersion}/{$businessId}/insights",
+                    [
+                        'metric' => 'reach',
+                        'period' => 'day',
+                        'since' => $startDate,
+                        'until' => $endDate,
+                        'access_token' => $token
+                    ]
+                )->json();
 
                 $reach = 0;
-                $engagement = 0;
-
-                foreach ($insights['data'] ?? [] as $metric) {
-                    $values = $metric['values'] ?? [];
-                    $metricName = $metric['name'] ?? '';
-
-                    if ($metricName === 'reach') {
-                        $reach = collect($values)->sum('value');
+                if (!isset($reachRes['error']) && !empty($reachRes['data'])) {
+                    $values = $reachRes['data'][0]['values'] ?? [];
+                    foreach ($values as $v) {
+                        $reach += (int) ($v['value'] ?? 0);
                     }
-                    if ($metricName === 'likes' || $metricName === 'comments') {
-                        $engagement += collect($values)->sum('value');
+                }
+
+                $engRes = Http::timeout(30)->get(
+                    "https://graph.facebook.com/{$this->fbVersion}/{$businessId}/insights",
+                    [
+                        'metric' => 'likes,comments,shares,saves',
+                        'period' => 'day',
+                        'since' => $startDate,
+                        'until' => $endDate,
+                        'access_token' => $token
+                    ]
+                )->json();
+
+                $engagement = 0;
+                if (!isset($engRes['error']) && !empty($engRes['data'])) {
+                    foreach ($engRes['data'] as $metric) {
+                        $values = $metric['values'] ?? [];
+                        foreach ($values as $v) {
+                            $engagement += (int) ($v['value'] ?? 0);
+                        }
                     }
                 }
 
@@ -135,7 +191,7 @@ class FetchFacebookHourlyStats implements ShouldQueue
                 );
 
             } catch (\Throwable $e) {
-                \Log::error('Instagram hourly fetch failed: ' . $e->getMessage());
+                \Log::error('Instagram fetch failed: ' . $e->getMessage());
             }
         }
 
@@ -147,10 +203,10 @@ class FetchFacebookHourlyStats implements ShouldQueue
         foreach ($ytAccounts as $account) {
             $creds = $account->credentials;
 
-            if (empty($creds['refresh_token'])) continue;
+            if (empty($creds['refresh_token']) || empty($creds['channel_id'])) continue;
 
             try {
-                $tokenRes = Http::asForm()->post('https://oauth2.googleapis.com/token', [
+                $tokenRes = Http::timeout(30)->asForm()->post('https://oauth2.googleapis.com/token', [
                     'client_id' => env('YOUTUBE_CLIENT_ID'),
                     'client_secret' => env('YOUTUBE_CLIENT_SECRET'),
                     'refresh_token' => $creds['refresh_token'],
@@ -160,11 +216,9 @@ class FetchFacebookHourlyStats implements ShouldQueue
                 if (!$tokenRes->successful()) continue;
 
                 $accessToken = $tokenRes->json('access_token');
-                $channelId = $creds['channel_id'] ?? null;
+                $channelId = $creds['channel_id'];
 
-                if (!$channelId) continue;
-
-                $channel = Http::withToken($accessToken)->get('https://www.googleapis.com/youtube/v3/channels', [
+                $channel = Http::timeout(30)->withToken($accessToken)->get('https://www.googleapis.com/youtube/v3/channels', [
                     'part' => 'statistics',
                     'id' => $channelId
                 ])->json();
@@ -192,7 +246,7 @@ class FetchFacebookHourlyStats implements ShouldQueue
                 );
 
             } catch (\Throwable $e) {
-                \Log::error('YouTube hourly fetch failed: ' . $e->getMessage());
+                \Log::error('YouTube fetch failed: ' . $e->getMessage());
             }
         }
     }

@@ -16,9 +16,7 @@ class Kernel extends ConsoleKernel
     protected function schedule(Schedule $schedule)
     {
         
-        $schedule->command('facebook:hourly-stats')
-            ->hourly()
-            ->withoutOverlapping();
+          $schedule->job(new \App\Jobs\FetchFacebookHourlyStats())->everyMinute();
         $schedule->command('posts:publish-scheduled')->everyMinute();
 
         $schedule->call(function () {

@@ -61,12 +61,19 @@
                     <i class="fas fa-calendar-alt absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 text-sm"></i>
                 </div>
 
-                <div class="relative hidden" id="pageFilterWrapper">
-                    <select id="pageSelect" class="pl-10 pr-8 py-2.5 border border-gray-200 rounded-lg bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all">
-                        <option value="all">All Pages</option>
-                    </select>
-                    <i class="fas fa-flag absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 text-sm"></i>
-                </div>
+                <!-- Page Filter - Sirf Facebook select karne par dikhega -->
+               <!-- Page Filter - Sirf Facebook select karne par dikhega, initially hidden -->
+<div class="relative hidden" id="pageFilterWrapper">
+    <select id="pageSelect" class="pl-10 pr-8 py-2.5 border border-gray-200 rounded-lg bg-white text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all">
+        <option value="all">All Pages</option>
+        @if(isset($facebookPages) && count($facebookPages) > 0)
+            @foreach($facebookPages as $fbPage)
+                <option value="{{ $fbPage['page_id'] }}">{{ $fbPage['page_name'] }}</option>
+            @endforeach
+        @endif
+    </select>
+    <i class="fas fa-flag absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 text-sm"></i>
+</div>
 
                 @if($hasInstagram && $instagramAccounts->count() > 0)
                 <div class="relative hidden" id="instagramFilterWrapper">
@@ -390,10 +397,12 @@ function updateFilterVisibility() {
     const instaFilter = document.getElementById('instagramFilterWrapper');
     const ytFilter = document.getElementById('youtubeFilterWrapper');
     
+    // SAB FILTERS HIDE KARO
     if (pageFilter) pageFilter.classList.add('hidden');
     if (instaFilter) instaFilter.classList.add('hidden');
     if (ytFilter) ytFilter.classList.add('hidden');
     
+    // SIRF SELECTED PLATFORM KA FILTER SHOW KARO
     if (platform === 'facebook') {
         if (pageFilter) pageFilter.classList.remove('hidden');
     } else if (platform === 'instagram') {
@@ -401,7 +410,9 @@ function updateFilterVisibility() {
     } else if (platform === 'youtube') {
         if (ytFilter) ytFilter.classList.remove('hidden');
     }
+    // platform === 'all' ke liye KOE FILTER NAHI DIKHNA CHAHIYE
     
+    // Reset filter values
     if (pageFilter?.querySelector('select')) pageFilter.querySelector('select').value = 'all';
     if (instaFilter?.querySelector('select')) instaFilter.querySelector('select').value = 'all';
     if (ytFilter?.querySelector('select')) ytFilter.querySelector('select').value = 'all';
@@ -488,7 +499,8 @@ function updatePageFilter(data) {
     const pageSelect = document.getElementById('pageSelect');
     const platform = document.getElementById('platformSelect').value;
 
-    if ((platform === 'facebook' || platform === 'all') && data.pages?.length) {
+    // Sirf tab show karo jab platform Facebook ho
+    if (platform === 'facebook' && data.pages?.length) {
         pageFilterWrapper.classList.remove('hidden');
 
         if (!pagesLoaded) {
