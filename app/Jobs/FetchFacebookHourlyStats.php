@@ -140,60 +140,295 @@ class FetchFacebookHourlyStats implements ShouldQueue
         }
 
         // ========== 3. YOUTUBE ==========
-        $ytAccounts = SocialAccount::where('platform', 'youtube')
-            ->where('status', 'connected')
-            ->get();
+        // ========== 3. YOUTUBE ==========
 
-        foreach ($ytAccounts as $account) {
-            $creds = $account->credentials;
+$ytAccounts = SocialAccount::where('platform', 'youtube')
+    ->where('status', 'connected')
+    ->get();
 
-            if (empty($creds['refresh_token'])) continue;
+foreach ($ytAccounts as $account) {
 
-            try {
-                $tokenRes = Http::asForm()->post('https://oauth2.googleapis.com/token', [
-                    'client_id' => env('YOUTUBE_CLIENT_ID'),
-                    'client_secret' => env('YOUTUBE_CLIENT_SECRET'),
-                    'refresh_token' => $creds['refresh_token'],
-                    'grant_type' => 'refresh_token',
-                ]);
+    $creds = $account->credentials ?? [];
 
-                if (!$tokenRes->successful()) continue;
+    if (empty($creds['refresh_token'])) {
+        continue;
+    }
 
-                $accessToken = $tokenRes->json('access_token');
-                $channelId = $creds['channel_id'] ?? null;
+    try {
 
-                if (!$channelId) continue;
+        /*
+        |--------------------------------------------------------------------------
+        | 1. REFRESH ACCESS TOKEN
+        |--------------------------------------------------------------------------
+        */
 
-                $channel = Http::withToken($accessToken)->get('https://www.googleapis.com/youtube/v3/channels', [
-                    'part' => 'statistics',
-                    'id' => $channelId
-                ])->json();
+        $tokenRes = Http::timeout(10)
+            ->asForm()
+            ->post(
+                'https://oauth2.googleapis.com/token',
+                [
+                    'client_id' =>
+                        env('YOUTUBE_CLIENT_ID'),
 
-                $stats = $channel['items'][0]['statistics'] ?? [];
-                $subscribers = (int) ($stats['subscriberCount'] ?? 0);
-                $views = (int) ($stats['viewCount'] ?? 0);
-                $likes = (int) ($stats['likeCount'] ?? 0);
-                $comments = (int) ($stats['commentCount'] ?? 0);
-                $engagement = $likes + $comments;
+                    'client_secret' =>
+                        env('YOUTUBE_CLIENT_SECRET'),
 
-                SocialHourlyStat::updateOrCreate(
+                    'refresh_token' =>
+                        $creds['refresh_token'],
+
+                    'grant_type' =>
+                        'refresh_token',
+                ]
+            );
+
+        if (!$tokenRes->successful()) {
+            \Log::warning(
+                'YouTube token refresh failed',
+                [
+                    'account_id' =>
+                        (string)$account->_id,
+
+                    'response' =>
+                        $tokenRes->json(),
+                ]
+            );
+
+            continue;
+        }
+
+        $accessToken =
+            $tokenRes->json('access_token');
+
+        if (!$accessToken) {
+            continue;
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | 2. CHANNEL ID
+        |--------------------------------------------------------------------------
+        */
+
+        $channelId =
+            $creds['channel_id'] ?? null;
+
+        if (!$channelId) {
+
+            $channelRes =
+                Http::timeout(10)
+                    ->withToken($accessToken)
+                    ->get(
+                        'https://www.googleapis.com/youtube/v3/channels',
+                        [
+                            'part' =>
+                                'id,statistics',
+
+                            'mine' =>
+                                'true',
+                        ]
+                    );
+
+            if (!$channelRes->successful()) {
+                continue;
+            }
+
+            $channelId =
+                $channelRes->json(
+                    'items.0.id'
+                );
+        }
+
+        if (!$channelId) {
+            continue;
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | 3. CURRENT SUBSCRIBERS
+        |--------------------------------------------------------------------------
+        */
+
+        $channelRes =
+            Http::timeout(10)
+                ->withToken($accessToken)
+                ->get(
+                    'https://www.googleapis.com/youtube/v3/channels',
                     [
-                        'platform' => 'youtube',
-                        'page_id' => $channelId,
-                        'stat_date' => $date,
-                        'stat_hour' => $hour,
-                    ],
-                    [
-                        'user_id' => (string) $account->user_id,
-                        'reach' => (int) $views,
-                        'engagement' => (int) $engagement,
-                        'followers' => (int) $subscribers,
+                        'part' =>
+                            'statistics',
+
+                        'id' =>
+                            $channelId,
                     ]
                 );
 
-            } catch (\Throwable $e) {
-                \Log::error('YouTube hourly fetch failed: ' . $e->getMessage());
-            }
+        $stats =
+            $channelRes->json(
+                'items.0.statistics',
+                []
+            );
+
+        $subscribers =
+            (int)(
+                $stats['subscriberCount'] ?? 0
+            );
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | 4. YOUTUBE ANALYTICS
+        |--------------------------------------------------------------------------
+        |
+        | Current hour/day ka actual views + likes + comments
+        |
+        */
+
+        $analyticsRes =
+            Http::timeout(15)
+                ->withToken($accessToken)
+                ->get(
+                    'https://youtubeanalytics.googleapis.com/v2/reports',
+                    [
+                        'ids' =>
+                            'channel==' . $channelId,
+
+                        'startDate' =>
+                            $date,
+
+                        'endDate' =>
+                            $date,
+
+                        'metrics' =>
+                            'views,likes,comments',
+
+                        'dimensions' =>
+                            'day',
+
+                        'sort' =>
+                            'day',
+                    ]
+                );
+
+        if (!$analyticsRes->successful()) {
+
+            \Log::warning(
+                'YouTube Analytics API failed',
+                [
+                    'account_id' =>
+                        (string)$account->_id,
+
+                    'channel_id' =>
+                        $channelId,
+
+                    'status' =>
+                        $analyticsRes->status(),
+
+                    'response' =>
+                        $analyticsRes->json(),
+                ]
+            );
+
+            continue;
         }
+
+
+        $rows =
+            $analyticsRes->json(
+                'rows',
+                []
+            );
+
+        $views = 0;
+        $likes = 0;
+        $comments = 0;
+
+
+        foreach ($rows as $row) {
+
+            /*
+             * day
+             * views
+             * likes
+             * comments
+             */
+
+            $views +=
+                (int)($row[1] ?? 0);
+
+            $likes +=
+                (int)($row[2] ?? 0);
+
+            $comments +=
+                (int)($row[3] ?? 0);
+        }
+
+
+        $engagement =
+            $likes + $comments;
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | 5. SAVE SNAPSHOT
+        |--------------------------------------------------------------------------
+        */
+
+        SocialHourlyStat::updateOrCreate(
+            [
+                'platform' =>
+                    'youtube',
+
+                'page_id' =>
+                    $channelId,
+
+                'stat_date' =>
+                    $date,
+
+                'stat_hour' =>
+                    $hour,
+            ],
+            [
+                'user_id' =>
+                    (string)$account->user_id,
+
+                'reach' =>
+                    (int)$views,
+
+                'engagement' =>
+                    (int)$engagement,
+
+                'followers' =>
+                    (int)$subscribers,
+
+                /*
+                 * Optional but useful if these columns exist
+                 */
+                'views' =>
+                    (int)$views,
+
+                'likes' =>
+                    (int)$likes,
+
+                'comments' =>
+                    (int)$comments,
+            ]
+        );
+
+    } catch (\Throwable $e) {
+
+        \Log::error(
+            'YouTube hourly fetch failed',
+            [
+                'account_id' =>
+                    (string)$account->_id,
+
+                'error' =>
+                    $e->getMessage(),
+            ]
+        );
+    }
+}
     }
 }

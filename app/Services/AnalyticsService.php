@@ -1143,54 +1143,39 @@ class AnalyticsService
      * HELPERS
      * ============================================================ */
     private function dbFollowerGrowth($stats): int
-    {
-        $daily = [];
+{
+    $latest = [];
 
-        foreach ($stats as $stat) {
-            $key = implode('|', [
-                (string)($stat->platform ?? ''),
-                (string)($stat->page_id ?? ''),
-                (string)($stat->stat_date ?? ''),
-            ]);
+    foreach ($stats as $stat) {
 
-            if (
-                !isset($daily[$key]) ||
-                (int)($stat->stat_hour ?? 0) > (int)($daily[$key]->stat_hour ?? 0)
-            ) {
-                $daily[$key] = $stat;
-            }
+        $key = implode('|', [
+            (string)($stat->platform ?? ''),
+            (string)($stat->page_id ?? ''),
+        ]);
+
+        if (
+            !isset($latest[$key]) ||
+            (
+                (string)($stat->stat_date ?? '') .
+                sprintf('%02d', (int)($stat->stat_hour ?? 0))
+            ) >
+            (
+                (string)($latest[$key]->stat_date ?? '') .
+                sprintf('%02d', (int)($latest[$key]->stat_hour ?? 0))
+            )
+        ) {
+            $latest[$key] = $stat;
         }
-
-        $accounts = [];
-
-        foreach ($daily as $stat) {
-            $key = implode('|', [
-                (string)($stat->platform ?? ''),
-                (string)($stat->page_id ?? ''),
-            ]);
-
-            $accounts[$key][] = $stat;
-        }
-
-        $growth = 0;
-
-        foreach ($accounts as $rows) {
-            usort($rows, fn($a, $b) =>
-                strcmp((string)$a->stat_date, (string)$b->stat_date)
-            );
-
-            if (count($rows) < 2) {
-                continue;
-            }
-
-            $first = (int)($rows[0]->followers ?? 0);
-            $last = (int)($rows[count($rows) - 1]->followers ?? 0);
-
-            $growth += max(0, $last - $first);
-        }
-
-        return $growth;
     }
+
+    $followers = 0;
+
+    foreach ($latest as $stat) {
+        $followers += (int)($stat->followers ?? 0);
+    }
+
+    return $followers;
+}
 
     private function metaDate(array $row): ?string
     {
