@@ -538,6 +538,24 @@ function updateRecentActivity(data) {
         const timeAgo = getTimeAgo(activity.timestamp);
         let postId = activity.id || activity._id || '';
         
+        // 🆕 INSIGHTS EXTRACT KARO (Likes, Views, Comments)
+        const likes = activity.insights?.likes || 0;
+        const comments = activity.insights?.comments || 0;
+        const shares = activity.insights?.shares || 0;
+        const views = activity.insights?.views || 0;
+
+        // 🆕 STATS HTML GENERATE KARO
+        let statsHtml = '';
+        if (likes > 0 || comments > 0 || views > 0) {
+            statsHtml = `
+                <div class="flex items-center gap-3 mt-2 text-xs text-gray-500">
+                    ${views > 0 ? `<span>👁️ ${views}</span>` : ''}
+                    ${likes > 0 ? `<span>❤️ ${likes}</span>` : ''}
+                    ${comments > 0 ? `<span>💬 ${comments}</span>` : ''}
+                </div>
+            `;
+        }
+        
         let mediaTypeIcon = '';
         if (activity.platform === 'instagram') {
             mediaTypeIcon = '<i class="fab fa-instagram text-pink-400"></i>';
@@ -575,6 +593,7 @@ function updateRecentActivity(data) {
             `;
         }
         
+        // 🆕 NAYA ACTIVITY HTML (STATS KE SAATH)
         const activityHTML = `
             <div class="flex items-start gap-3 p-3 hover:bg-gray-50 rounded-lg transition-colors cursor-pointer" 
                 onclick="window.location.href = '/post/${postId}'">
@@ -587,6 +606,7 @@ function updateRecentActivity(data) {
                     </div>
                     <p class="text-sm text-gray-900 font-medium truncate">${activity.title || 'Untitled'}</p>
                     <p class="text-xs text-gray-500 mt-1">${activity.description || ''}</p>
+                    ${statsHtml}  <!-- 🆕 LIKES/VIEWS YAHAN DIKHENGE -->
                 </div>
                 <div class="text-xs text-gray-400 flex-shrink-0">${timeAgo}</div>
             </div>
@@ -595,7 +615,6 @@ function updateRecentActivity(data) {
         container.innerHTML += activityHTML;
     });
 }
-
 function getTimeAgo(timestamp) {
     const now = new Date();
     const postTime = new Date(timestamp);
