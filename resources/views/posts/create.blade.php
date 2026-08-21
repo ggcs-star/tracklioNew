@@ -1617,7 +1617,10 @@ function renderYouTubePreview(content, mediaFiles) {
     const channelName = selectedYoutubeChannel ? selectedYoutubeChannel.name : 'YouTube Channel';
     const channelInitial = channelName.charAt(0).toUpperCase();
     const mediaUrl = mediaFiles.length > 0 ? filePreviews[0] : null;
-    const isVideo = mediaFiles[0] && mediaFiles[0].type && mediaFiles[0].type.startsWith('video/');
+    
+    // 🛠️ FIX: selectedFiles array se type check karo
+    const isVideo = selectedFiles[0] && selectedFiles[0].type && selectedFiles[0].type.startsWith('video/');
+    
     const videoTitle = content && content.trim() !== '' ? content : 'Untitled Video';
     
     let mediaHtml = '';

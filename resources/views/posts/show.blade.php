@@ -632,9 +632,13 @@
             <i class="far fa-chart-line"></i>
         </div>
         <div class="omnipost-stat-number">
-            @php
-                $total = ($reactions ?? 0) + ($comments ?? 0);
-                $engagementRate = $total > 0 ? round(($total / max($reactions, 1)) * 100) : 0;
+           @php
+                $totalEngagement = ($reactions ?? 0) + ($comments ?? 0) + ($shares ?? 0);
+                
+                $engagementRate = 0;
+                if(isset($views) && $views > 0) {
+                    $engagementRate = round(($totalEngagement / $views) * 100);
+                }
             @endphp
             {{ $engagementRate }}%
         </div>
