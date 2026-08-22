@@ -121,11 +121,150 @@ class AnalyticsService
         }
 
         if ($platformFilter === 'instagram' && $instagramFilter !== 'all') {
-            $query->where('page_id', $instagramFilter);
-        }
 
-        if ($platformFilter === 'youtube' && $youtubeFilter !== 'all') {
-            $query->where('page_id', $youtubeFilter);
+            $instagramAccount = SocialAccount::where('user_id', $userId)
+                ->where('status', 'connected')
+                ->get()
+                ->first(function ($account) use ($instagramFilter) {
+
+                    if (!$this->isPlatformAccount($account, 'instagram')) {
+                        return false;
+                    }
+
+                    $credentials = $this->accountCredentials($account);
+
+                    $values = [
+                        (string) ($account->_id ?? ''),
+                        (string) ($account->id ?? ''),
+                        (string) ($account->username ?? ''),
+                        (string) ($account->name ?? ''),
+                        (string) ($account->handle ?? ''),
+                        (string) ($account->page_id ?? ''),
+                        (string) ($account->instagram_business_id ?? ''),
+                        (string) ($account->instagram_business_account_id ?? ''),
+                        (string) ($credentials['username'] ?? ''),
+                        (string) ($credentials['name'] ?? ''),
+                        (string) ($credentials['instagram_business_id'] ?? ''),
+                        (string) ($credentials['instagram_business_account_id'] ?? ''),
+                        (string) ($credentials['page_id'] ?? ''),
+                        (string) ($credentials['pageId'] ?? ''),
+                    ];
+
+                    $filter = strtolower(trim((string) $instagramFilter));
+
+                    foreach ($values as $value) {
+                        if (
+                            $value !== '' &&
+                            strtolower(trim($value)) === $filter
+                        ) {
+                            return true;
+                        }
+                    }
+
+                    return false;
+                });
+
+            if ($instagramAccount) {
+
+                $credentials = $this->accountCredentials($instagramAccount);
+
+                $businessId = $this->firstValue(
+                    $instagramAccount,
+                    [
+                        'instagram_business_id',
+                        'instagram_business_account_id',
+                        'page_id',
+                    ],
+                    $credentials,
+                    [
+                        'instagram_business_id',
+                        'instagram_business_account_id',
+                        'page_id',
+                        'pageId',
+                    ]
+                );
+
+                if ($businessId) {
+                    $query->where('page_id', $businessId);
+                } else {
+                    $query->whereRaw('1 = 0');
+                }
+
+            } else {
+                $query->whereRaw('1 = 0');
+            }
+
+
+        } elseif ($platformFilter === 'youtube' && $youtubeFilter !== 'all') {
+
+            $youtubeAccount = SocialAccount::where('user_id', $userId)
+                ->where('status', 'connected')
+                ->get()
+                ->first(function ($account) use ($youtubeFilter) {
+
+                    if (!$this->isPlatformAccount($account, 'youtube')) {
+                        return false;
+                    }
+
+                    $credentials = $this->accountCredentials($account);
+
+                    $values = [
+                        (string) ($account->_id ?? ''),
+                        (string) ($account->id ?? ''),
+                        (string) ($account->channel_id ?? ''),
+                        (string) ($account->username ?? ''),
+                        (string) ($account->name ?? ''),
+                        (string) ($account->handle ?? ''),
+                        (string) ($account->title ?? ''),
+                        (string) ($credentials['channel_id'] ?? ''),
+                        (string) ($credentials['channelId'] ?? ''),
+                        (string) ($credentials['channel_name'] ?? ''),
+                        (string) ($credentials['channel_title'] ?? ''),
+                        (string) ($credentials['username'] ?? ''),
+                        (string) ($credentials['name'] ?? ''),
+                        (string) ($credentials['title'] ?? ''),
+                        (string) ($credentials['handle'] ?? ''),
+                    ];
+
+                    $filter = strtolower(trim((string) $youtubeFilter));
+
+                    foreach ($values as $value) {
+                        if (
+                            $value !== '' &&
+                            strtolower(trim($value)) === $filter
+                        ) {
+                            return true;
+                        }
+                    }
+
+                    return false;
+                });
+
+            if ($youtubeAccount) {
+
+                $credentials = $this->accountCredentials($youtubeAccount);
+
+                $channelId = $this->firstValue(
+                    $youtubeAccount,
+                    [
+                        'channel_id',
+                    ],
+                    $credentials,
+                    [
+                        'channel_id',
+                        'channelId',
+                    ]
+                );
+
+                if ($channelId) {
+                    $query->where('page_id', $channelId);
+                } else {
+                    $query->whereRaw('1 = 0');
+                }
+
+            } else {
+                $query->whereRaw('1 = 0');
+            }
         }
 
         $stats = $query->orderBy('stat_date')->orderBy('stat_hour')->get();
@@ -334,10 +473,31 @@ class AnalyticsService
                 continue;
             }
 
-            if ($pageFilter !== 'all' && $pageId !== (string)$pageFilter) {
-                continue;
-            }
+            if ($pageFilter !== 'all') {
 
+    $filter = strtolower(trim((string) $pageFilter));
+
+    $pageValues = [
+        strtolower(trim((string) ($page['page_id'] ?? ''))),
+        strtolower(trim((string) ($page['id'] ?? ''))),
+        strtolower(trim((string) ($page['name'] ?? ''))),
+        strtolower(trim((string) ($page['page_name'] ?? ''))),
+        strtolower(trim((string) ($page['username'] ?? ''))),
+    ];
+
+    $matched = false;
+
+    foreach ($pageValues as $value) {
+        if ($value !== '' && $value === $filter) {
+            $matched = true;
+            break;
+        }
+    }
+
+    if (!$matched) {
+        continue;
+    }
+}
             /*
              * One profile request + one insights request per page.
              * Never fetch every post from Meta.

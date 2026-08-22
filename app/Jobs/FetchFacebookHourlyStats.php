@@ -62,16 +62,16 @@ class FetchFacebookHourlyStats implements ShouldQueue
 
                 SocialHourlyStat::updateOrCreate(
                     [
-                        'platform' => 'facebook',
-                        'page_id' => $pageId,
-                        'stat_date' => $date,
-                        'stat_hour' => $hour,
+                        'user_id'    => (string) $account->user_id,
+                        'platform'   => 'facebook',
+                        'page_id'    => (string) $pageId,
+                        'stat_date'  => $date,
+                        'stat_hour'  => (int) $hour,
                     ],
                     [
-                        'user_id' => (string) $account->user_id,
-                        'reach' => (int) $reach,
+                        'reach'      => (int) $reach,
                         'engagement' => (int) $engagement,
-                        'followers' => (int) ($info['followers_count'] ?? 0),
+                        'followers'  => (int) ($info['followers_count'] ?? 0),
                     ]
                 );
             }
@@ -121,13 +121,13 @@ class FetchFacebookHourlyStats implements ShouldQueue
 
                 SocialHourlyStat::updateOrCreate(
                     [
+                        'user_id' => (string) $account->user_id,
                         'platform' => 'instagram',
-                        'page_id' => $businessId,
+                        'page_id' => (string) $businessId,
                         'stat_date' => $date,
-                        'stat_hour' => $hour,
+                        'stat_hour' => (int) $hour,
                     ],
                     [
-                        'user_id' => (string) $account->user_id,
                         'reach' => (int) $reach,
                         'engagement' => (int) $engagement,
                         'followers' => (int) $followers,
@@ -140,7 +140,7 @@ class FetchFacebookHourlyStats implements ShouldQueue
         }
 
         // ========== 3. YOUTUBE ==========
-        // ========== 3. YOUTUBE ==========
+      
 
 $ytAccounts = SocialAccount::where('platform', 'youtube')
     ->where('status', 'connected')
@@ -377,17 +377,11 @@ foreach ($ytAccounts as $account) {
 
         SocialHourlyStat::updateOrCreate(
             [
-                'platform' =>
-                    'youtube',
-
-                'page_id' =>
-                    $channelId,
-
-                'stat_date' =>
-                    $date,
-
-                'stat_hour' =>
-                    $hour,
+                'user_id'   => (string) $account->user_id,
+                'platform'  => 'youtube',
+                'page_id'   => (string) $channelId,
+                'stat_date' => $date,
+                'stat_hour' => (int) $hour,
             ],
             [
                 'user_id' =>
