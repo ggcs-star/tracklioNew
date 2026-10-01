@@ -46,7 +46,7 @@ public function index(Request $request)
 
         // stats (stable on every page)
         'totalQrs'     => $stats->count(),
-        'totalLinks'   => $stats->sum('visit_count'),
+        'totalLinks' => $stats->count(),
         'totalVisits'  => $stats->sum('visit_count'),
         'totalQrScans' => $stats->sum('qr_scan_count'),
         'activeQrs'    => $stats->count(),
